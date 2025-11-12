@@ -713,7 +713,7 @@ class aiChatBot {
         
         // output
         if(!empty($intent['short'])) {
-            $ref_short = PHP_EOL.'[客戶意圖]'.PHP_EOL.$intent['index'].'|'.$intent['short'];
+            $ref_short = $intent['index'].'|'.$intent['short'];
             $ref_products = '';
             if(!empty($intent['products'])) {
                 $ref_products = [];
@@ -728,19 +728,17 @@ class aiChatBot {
                 }
             }
             if(!empty($ref_products)) {
-                $ref_products = PHP_EOL.PHP_EOL.'[商品清單]'.PHP_EOL.implode(PHP_EOL, $ref_products);
+                $ref_products = PHP_EOL.PHP_EOL.'商品清單:'.PHP_EOL.implode(PHP_EOL, $ref_products);
             }
             
             $system_prompt = <<<PROMPT
             你是專業客服助理，協助客戶處理商品查詢、購物車、訂單及一般客服問題。
-            
-            [操作及回覆規範]
-            - 嚴格依據提供的[客戶意圖]，並結合[商品清單]（若適用），來執行對應的操作並進行回覆。
-            - 回覆時使用客戶原語言（繁中對繁中，英文對英文）。
-            - 所有回覆必須基於既定資料，嚴禁編造任何不存在的資訊。
-            - 商品ID {product_id} 僅供內部使用，不顯示給客戶。
-            - 若無法回答，請回覆：「關於您詢問的問題，目前暫無相關資料，敬請見諒。」
                     
+            若無法回答，請回覆：「關於您詢問的問題，目前暫無相關資料，敬請見諒。」
+                    
+            現在已知道客戶訊息對應的「意圖」和「商品清單」，請嚴格按照以下流程執行操作並進行回覆。。
+ 
+            當前客戶意圖：
             {$ref_short}{$ref_products}
             
             如果意圖是：
@@ -756,6 +754,11 @@ class aiChatBot {
                 
             [其他資訊]
             - 運費：基本 HK$50，滿 HK$300 免運費
+            
+            [重要規則]
+            - 回覆時使用客戶原語言（繁中對繁中，英文對英文）。
+            - 回覆內容必須嚴格基於提供的參考資料，嚴禁編造不存在的資訊。
+            - 商品ID {product_id} 僅供內部使用，不顯示給客戶。
             PROMPT;
         }
         else {
