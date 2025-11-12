@@ -18,7 +18,7 @@ class aiChatBot {
     private $_extraInfo2 = [];
     private $_maxRoundsDialogue = 5;
 
-    private $_apiKey = 'xxxxx';
+    private $_apiKey = 'xxxx';
     private $_apiURL = 'https://api.deepseek.com/v1/chat/completions';
     private $_apiModel = 'deepseek-chat';
 
@@ -736,7 +736,7 @@ class aiChatBot {
                     
             若無法回答，請回覆：「關於您詢問的問題，目前暫無相關資料，敬請見諒。」
                     
-            現在已知道客戶訊息對應的「意圖」和「商品清單」，請嚴格按照以下流程執行操作並進行回覆。。
+            現在已知道客戶訊息對應的「意圖」和「商品清單」，請進行最終操作並進行回覆。
  
             當前客戶意圖：
             {$ref_short}{$ref_products}
@@ -757,7 +757,7 @@ class aiChatBot {
             
             [重要規則]
             - 回覆時使用客戶原語言（繁中對繁中，英文對英文）。
-            - 回覆內容必須嚴格基於提供的參考資料，嚴禁編造不存在的資訊。
+            - 所有回覆必須基於既定資料，嚴禁編造任何不存在的資訊。
             - 商品ID {product_id} 僅供內部使用，不顯示給客戶。
             PROMPT;
         }
