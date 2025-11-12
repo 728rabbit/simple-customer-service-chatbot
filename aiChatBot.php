@@ -18,14 +18,9 @@ class aiChatBot {
     private $_extraInfo2 = [];
     private $_maxRoundsDialogue = 5;
 
-    private $_apiKey = '';
+    private $_apiKey = 'sk-';
     private $_apiURL = 'https://api.deepseek.com/v1/chat/completions';
     private $_apiModel = 'deepseek-chat';
-    
-
-    /*private $_apiKey = 'sk-ZblDzitHNzx3FORJ3G1da78EOlhSTavAkPRqBdJ8LVrz49AC';
-    private $_apiURL = 'https://yinli.one/v1/chat/completions';
-    private $_apiModel = 'gpt-3.5-turbo';*/
 
     public function __construct($sessionID, $debugMode = false) {
         $this->_sessionID = $sessionID;
@@ -175,7 +170,6 @@ class aiChatBot {
         $data = [
             'model'         =>  $this->_apiModel,
             'messages'      =>  $client_message,
-            //'temperature'   =>  1,
             'max_tokens'    =>  600,
         ];
         
@@ -686,6 +680,10 @@ class aiChatBot {
                 '查一下我的訂單',
                 '6|查閱訂單'
             ],
+            [
+                '訂單編號 68452',
+                '6|查閱訂單'
+            ],
 
             // others - 其他詢問
             [
@@ -737,6 +735,8 @@ class aiChatBot {
             }
             
             $system_prompt = <<<PROMPT
+            本次對話ID： {$this->_sessionID}
+            
             你是專業客服助理，協助客戶處理商品查詢、購物車、訂單及一般客服問題。
                     
             若無法回答，請回覆：「關於您詢問的問題，目前暫無相關資料，敬請見諒。」
@@ -768,24 +768,39 @@ class aiChatBot {
         }
         else {
             $system_prompt = <<<PROMPT
+            本次對話ID： {$this->_sessionID}
+            
             您是一位專門負責意圖識別的專家，根據客戶訊息進行精準分析，然後正確判斷其意圖，並嚴格返回以下格式。
                     
             [意圖選項]
             {$intent_description}
+            
+            [判斷規則]
+            1. 如果訊息中提到商品名稱  
+               - 詢問商品資訊 → 1|查詢商品  
+               - 表示購買／加入購物車 → 2|添加商品  
+               - 修改購物車數量或刪除商品 → 3|調整商品
+            2. 查看購物車相關訊息 → 4|查閱購物車。
+            3. 結帳或付款相關訊息 → 5|確認訂單。
+            4. 如果訊息中包含「訂單編號」「我的訂單」「查訂單」等關鍵字 → 6|查閱訂單
+            5. 其他非交易問題判定 → 7|其他。
 
             [回覆規範]
-            - 只能[意圖選項]其中一項
+            - 只能選擇[意圖選項]其中一項
             - 格式:「意圖編號|意圖名稱|商品名稱」
             - 僅當訊息明確提及商品名稱時填寫，多個用 # 分隔
             - 不得包含其他文字、符號或表情
-            - 無法判斷時，輸出:5|其他
 
-            [範例]
+            [參考範例]
             {$cases_description}
 
             ** 僅輸出結果，不得包含其他說明或符號。**
             PROMPT; 
         }
+        
+        echo '<pre>';
+        print_r($system_prompt);
+        echo '</pre>';
 
         return $system_prompt;
     }
