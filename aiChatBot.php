@@ -18,7 +18,7 @@ class aiChatBot {
     private $_extraInfo2 = [];
     private $_maxRoundsDialogue = 5;
 
-    private $_apiKey = 'xxxxxxx';
+    private $_apiKey = 'xxxxx';
     private $_apiURL = 'https://api.deepseek.com/v1/chat/completions';
     private $_apiModel = 'deepseek-chat';
 
@@ -569,182 +569,144 @@ class aiChatBot {
             // view_product - 查詢商品
             [
                 '你們沒有{商品A}？',
-                '1|查詢商品|商品A',
-                'view_product'
+                '1|查詢商品|商品A'
             ],
             [
                 '{商品A}和{商品B}',
-                '1|查詢商品|{商品A}#{商品B}', 
-                'view_product'
+                '1|查詢商品|{商品A}#{商品B}'
             ],
             [
                 '{商品A}今天價格?',
-                '1|查詢商品|{商品A}',
-                'view_product'
+                '1|查詢商品|{商品A}'
             ],
             [
                 '我想購買{商品A}',
-                '1|查詢商品|{商品A}',
-                'view_product'
+                '1|查詢商品|{商品A}'
             ],
             [
                 '{商品A}有現貨嗎？',
-                '1|查詢商品|{商品A}',
-                'view_product'
+                '1|查詢商品|{商品A}'
             ],
 
             // add_to_cart - 添加購物車
             [
                 '2件{商品A}',
-                '2|添加商品|{商品A}*2',
-                'add_to_cart'
+                '2|添加商品|{商品A}*2'
             ],
             [
                 '2件{商品A}和1個{商品B}',
-                '2|添加商品|{商品A}*2#{商品B}*1',
-                'add_to_cart'
+                '2|添加商品|{商品A}*2#{商品B}*1'
             ],
             [
                 '加入{商品A}',
-                '2|添加商品|{商品A}*1',
-                'add_to_cart'
+                '2|添加商品|{商品A}*1'
             ],
             [
                 '{商品A}買三個',
-                '2|添加商品|{商品A}*3',
-                'add_to_cart'
+                '2|添加商品|{商品A}*3'
             ],
 
             // revise_cart - 調整購物車
             [
                 '{商品A}要1件就可以',
-                '3|調整商品|{商品A}*1',
-                'revise_cart'
+                '3|調整商品|{商品A}*1'
             ],
             [
                 '{商品A}要1件，{商品B}則要2個就可以',
-                '3|調整商品|{商品A}*1#{商品B}*2',
-                'revise_cart'
+                '3|調整商品|{商品A}*1#{商品B}*2'
             ],
             [
                 '不要{商品B}了',
-                '3|調整商品|{商品B}*0',
-                'revise_cart'
+                '3|調整商品|{商品B}*0'
             ],
             [
                 '{商品A}改為3個',
-                '3|調整商品|{商品A}*3',
-                'revise_cart'
+                '3|調整商品|{商品A}*3'
             ],
             [
                 '刪除{商品B}',
-                '3|調整商品|{商品B}*0',
-                'revise_cart'
+                '3|調整商品|{商品B}*0'
             ],
 
             // view_cart - 查看購物車
             [
                 '我的購物車',
-                '4|查閱購物車',
-                'view_cart'
+                '4|查閱購物車'
             ],
             [
                 '我買了什麼',
-                '4|查閱購物車', 
-                'view_cart'
+                '4|查閱購物車'
             ],
             [
                 '購物車內容',
-                '4|查閱購物車',
-                'view_cart'
+                '4|查閱購物車'
             ],
             [
                 '看一下購物車',
-                '4|查閱購物車',
-                'view_cart'
+                '4|查閱購物車'
             ],
 
             // confirm_order - 確認訂單
             [
                 '結賬',
-                '5|確認訂單',
-                'confirm_order'
+                '5|確認訂單'
             ],
             [
                 '付款',
-                '5|確認訂單',
-                'confirm_order'
+                '5|確認訂單'
             ],
             [
                 '我要結帳',
-                '5|確認訂單',
-                'confirm_order'
+                '5|確認訂單'
             ],
             [
                 '去付款',
-                '5|確認訂單',
-                'confirm_order'
+                '5|確認訂單'
             ],
 
             // view_order - 查看訂單
             [
                 '我的訂單',
-                '6|查閱訂單',
-                'view_order'
+                '6|查閱訂單'
             ],
             [
                 '訂單記錄',
-                '6|查閱訂單',
-                'view_order'
+                '6|查閱訂單'
             ],
             [
                 '歷史訂單',
-                '6|查閱訂單', 
-                'view_order'
+                '6|查閱訂單'
             ],
             [
                 '查一下我的訂單',
-                '6|查閱訂單',
-                'view_order'
+                '6|查閱訂單'
             ],
 
             // others - 其他詢問
             [
                 '你們的營業時間?',
-                '7|其他',
-                'others'
+                '7|其他'
             ],
             [
                 '送貨服務',
-                '7|其他', 
-                'others'
+                '7|其他'
             ],
             [
                 '運費多少錢？',
-                '7|其他',
-                'others'
+                '7|其他'
             ],
             [
                 '客服電話',
-                '7|其他',
-                'others'
+                '7|其他'
             ],
             [
                 '退貨政策',
-                '7|其他',
-                'others'
+                '7|其他'
             ]
         ];
         $cases_description = [];
         foreach ($cases as $case) {
             $case[0] = '「'.$case[0].'」';
-            $case[1] = $case[1];
-            if(empty($intent['short'])) {
-                unset($case[2]);
-            }
-            if(!empty($case[2])) {
-                $case[2] = 'Function：'.$case[2];
-            }
             $cases_description[] = implode(' → ', $case);
         }
         $cases_description = implode(PHP_EOL, $cases_description);
@@ -766,17 +728,20 @@ class aiChatBot {
                 }
             }
             if(!empty($ref_products)) {
-                $ref_products = PHP_EOL.PHP_EOL.'商品清單:'.PHP_EOL.implode(PHP_EOL, $ref_products);
+                $ref_products = PHP_EOL.PHP_EOL.'[商品清單]'.PHP_EOL.implode(PHP_EOL, $ref_products);
             }
             
             $system_prompt = <<<PROMPT
             你是專業客服助理，協助客戶處理商品查詢、購物車、訂單及一般客服問題。
-                    
-            若無法回答，請回覆：「關於您詢問的問題，目前暫無相關資料，敬請見諒。」
-                    
-            現在已知道客戶訊息對應的「意圖」和「商品清單」，請進行最終操作。
- 
-            當前客戶意圖：
+            
+            [核心原則]
+            - 嚴格依據提供的 [客戶意圖]，並結合 [商品清單]（若適用），來執行對應的操作並進行回覆。
+            - 回覆時使用客戶原語言（繁中對繁中，英文對英文）。
+            - 所有回覆必須基於既定資料，嚴禁編造任何不存在的資訊。
+            - 商品ID {product_id} 僅供內部使用，不顯示給客戶。
+            - 若無法回答，請回覆：「關於您詢問的問題，目前暫無相關資料，敬請見諒。」
+
+            [客戶意圖]
             {$ref_short}{$ref_products}
             
             如果意圖是：
@@ -792,12 +757,6 @@ class aiChatBot {
                 
             [其他資訊]
             - 運費：基本 HK$50，滿 HK$300 免運費
-            
-            [重要規則]
-            - 回覆時使用客戶原語言（繁中對繁中，英文對英文）。
-            - 回覆內容必須嚴格基於提供的參考資料，嚴禁編造不存在的資訊。
-            - 商品ID {product_id} 僅供內部使用，不顯示給客戶。
-            
             PROMPT;
         }
         else {
