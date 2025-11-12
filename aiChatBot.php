@@ -797,10 +797,6 @@ class aiChatBot {
             ** 僅輸出結果，不得包含其他說明或符號。**
             PROMPT; 
         }
-        
-        echo '<pre>';
-        print_r($system_prompt);
-        echo '</pre>';
 
         return $system_prompt;
     }
