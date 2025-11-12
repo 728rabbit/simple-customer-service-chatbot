@@ -18,9 +18,14 @@ class aiChatBot {
     private $_extraInfo2 = [];
     private $_maxRoundsDialogue = 5;
 
-    private $_apiKey = 'xxxx';
+    private $_apiKey = '';
     private $_apiURL = 'https://api.deepseek.com/v1/chat/completions';
     private $_apiModel = 'deepseek-chat';
+    
+
+    /*private $_apiKey = 'sk-ZblDzitHNzx3FORJ3G1da78EOlhSTavAkPRqBdJ8LVrz49AC';
+    private $_apiURL = 'https://yinli.one/v1/chat/completions';
+    private $_apiModel = 'gpt-3.5-turbo';*/
 
     public function __construct($sessionID, $debugMode = false) {
         $this->_sessionID = $sessionID;
@@ -757,7 +762,7 @@ class aiChatBot {
             
             [重要規則]
             - 回覆時使用客戶原語言（繁中對繁中，英文對英文）。
-            - 所有回覆必須基於既定資料，嚴禁編造任何不存在的資訊。
+            - 回覆內容必須嚴格基於提供的參考資料，嚴禁編造不存在的資訊。
             - 商品ID {product_id} 僅供內部使用，不顯示給客戶。
             PROMPT;
         }
