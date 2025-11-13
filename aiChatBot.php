@@ -14,18 +14,18 @@ class aiChatBot {
     private $_sessionID;
     private $_sessionPath = 'sessions/';
     private $_intentOptions = [
-        1 => ['title' => '商品查詢', 'content' => '功能、價格、規格、庫存'],
-        2 => ['title' => '加入購物車', 'content' => '購買意願、加入購物車'],
-        3 => ['title' => '修改購物車', 'content' => '刪減或修改商品數量'],
-        4 => ['title' => '查看購物車', 'content' => '商品清單、總金額'],
-        5 => ['title' => '確認訂單', 'content' => '結帳、付款操作'],
-        6 => ['title' => '訂單查詢', 'content' => '訂單詳情、進度'],
+        1 => ['title' => '商品查詢', 'content' => '功能、價格、規格、庫存', 'function' => 'view_product'],
+        2 => ['title' => '加入購物車', 'content' => '購買意願、加入購物車', 'function' => 'add_to_cart'],
+        3 => ['title' => '修改購物車', 'content' => '刪減或修改商品數量', 'function' => 'revise_cart'],
+        4 => ['title' => '查看購物車', 'content' => '商品清單、總金額', 'function' => 'view_cart'],
+        5 => ['title' => '確認訂單', 'content' => '結帳、付款操作', 'function' => 'confirm_order'],
+        6 => ['title' => '訂單查詢', 'content' => '訂單詳情、進度', 'function' => 'view_order'],
         7 => ['title' => '其他問題', 'content' => '營業時間、售後服務'],
     ];
     private $_intentInfo = [];
     private $_extraInfo1 = [];
     private $_extraInfo2 = [];
-    private $_maxRoundsDialogue = 5;
+    private $_maxRoundsDialogue = 3;
 
     private $_apiKey = 'sk-';
     private $_apiURL = 'https://api.deepseek.com/v1/chat/completions';
@@ -180,7 +180,7 @@ class aiChatBot {
             'model'         =>  $this->_apiModel,
             'messages'      =>  $client_message,
             //'temperature'   =>  0,
-            'max_tokens'    =>  400,
+            'max_tokens'    =>  1000,
         ];
         
         if ($tools) {
@@ -553,7 +553,7 @@ class aiChatBot {
                 if(!empty($this->_intentOptions[intval($parts[0])])) {
                     $result['index'] = intval($parts[0]);
                     $result['short'] = trim($parts[1]);
-                    $result['products'] = (in_array($result['index'], [2,3])? (trim($parts[2] ?? '')) : '');
+                    $result['products'] = (in_array($result['index'], [1, 2,3])? (trim($parts[2] ?? '')) : '');
                     $result['orders'] = (in_array($result['index'], [6])? (trim($parts[2] ?? '')) : '');
                     $result['description'] = $intent_reply;
 
@@ -566,13 +566,26 @@ class aiChatBot {
         return $result;
     }
     
-    function initSystmPrompt($intent = []) {
-        if(!empty($intent['short'])) {
-            $ref_short = PHP_EOL.'「客戶意圖」'.PHP_EOL.$intent['index'].'|'.$intent['short'];
+    function initSystmPrompt($current_intent = []) {
+        if(!empty($current_intent['short'])) {
+            $intent_function = [];
+            if(!empty($this->_intentOptions)) {
+                foreach ($this->_intentOptions as $intent_key => $intent) {
+                    if(!empty($intent['function'])) {
+                        $intent_function[] = $intent_key.'|'.$intent['title'].' → 必須呼叫 function: '.$intent['function'];
+                    }
+                    else {
+                        $intent_function[] = $intent_key.'|'.$intent['title'].' → 直接用文字回覆，不需呼叫 function';
+                    }
+                }
+            }
+            $intent_function = implode(PHP_EOL, $intent_function);
+            
+            $ref_short = PHP_EOL.'「客戶意圖」'.PHP_EOL.$current_intent['index'].'|'.$current_intent['short'];
             $ref_products = '';
-            if(!empty($intent['products'])) {
+            if(!empty($current_intent['products'])) {
                 $ref_products = [];
-                foreach (explode('#', $intent['products']) as $product) {
+                foreach (explode('#', $current_intent['products']) as $product) {
                     preg_match('/^(.*)(\*)(\d+)$/i', $product, $match);
                     if(!empty($match)) {
                         $ref_products[] = 'product_name: '.$match[1].' | quantity: '.max(0, $match[3]);
@@ -591,18 +604,12 @@ class aiChatBot {
             
             你是專業客服助理，協助客戶處理商品查詢、購物車、訂單及一般客服問題。
       
-            現在已知道「客戶意圖」和「商品清單/訂單編號」，請進行對應操作並進行回覆。
+            嚴格按照「客戶意圖」和「商品清單/訂單編號」資料，進行對應操作並並輸出回復結果。
             
             {$ref_short}{$ref_products}
             
             如果意圖是：
-            - 1|查詢商品 → 呼叫 function「view_product」
-            - 2|添加商品 → 呼叫 function「add_to_cart」
-            - 3|調整商品 → 呼叫 function「revise_cart」
-            - 4|查閱購物車 → 呼叫 function「view_cart」
-            - 5|確認訂單 → 呼叫 function「confirm_order」
-            - 6|查閱訂單 → 呼叫 function「view_order」
-            - 7|其他 → 直接用文字回覆，不呼叫 function
+            {$intent_function}
                     
             ** function 如有對應參數（例如 {product_name}, {quantity}），請一併提供。**
                 
@@ -620,7 +627,7 @@ class aiChatBot {
             $intent_description = [];
             if(!empty($this->_intentOptions)) {
                 foreach ($this->_intentOptions as $intent_key => $intent) {
-                    $intent_description[] = $intent_key.'|'.$intent['title'];
+                    $intent_description[] = $intent_key.'|'.$intent['title'].':'.$intent['content'];
                 }
             }
             $intent_description = implode(PHP_EOL, $intent_description);
@@ -635,11 +642,12 @@ class aiChatBot {
                 // add_to_cart - 添加購物車
                 ['2件{商品A}', '2|添加商品|{商品A}*2'],
                 ['2件{商品A}和1個{商品B}', '2|添加商品|{商品A}*2#{商品B}*1'],
+                ['加多1個{商品B}', '2|添加商品|{商品B}*1'],
 
                 // revise_cart - 調整購物車
-                ['{商品A}改為1件', '3|調整商品|{商品A}*1' ],
-                ['{商品A}要1件，{商品B}則要2個', '3|調整商品|{商品A}*1#{商品B}*2'],
-                ['不要{商品B}了', '3|調整商品|{商品B}*0'],
+                ['{商品A}要1個就可以', '3|調整商品|{商品A}*1'],
+                ['{商品A}改為1件', '3|調整商品|{商品A}*1'],
+                ['不需要{商品B}了', '3|調整商品|{商品B}*0'],
 
                 // view_cart - 查看購物車
                 ['我的購物車', '4|查閱購物車'],
@@ -679,6 +687,12 @@ class aiChatBot {
             「範例」
             {$cases_description}
             PROMPT;
+        }
+        
+        if($this->_debugMode) {
+            echo '<pre>';
+            print_r($system_prompt);
+            echo '</pre>';
         }
 
         return $system_prompt;
