@@ -13,6 +13,15 @@ class aiChatBot {
     private $_debugMode = false;
     private $_sessionID;
     private $_sessionPath = 'sessions/';
+    private $_intentOptions = [
+        1 => ['title' => '商品查詢', 'content' => '功能、價格、規格、庫存'],
+        2 => ['title' => '加入購物車', 'content' => '購買意願、加入購物車'],
+        3 => ['title' => '修改購物車', 'content' => '刪減或修改商品數量'],
+        4 => ['title' => '查看購物車', 'content' => '商品清單、總金額'],
+        5 => ['title' => '確認訂單', 'content' => '結帳、付款操作'],
+        6 => ['title' => '訂單查詢', 'content' => '訂單詳情、進度'],
+        7 => ['title' => '其他問題', 'content' => '營業時間、售後服務'],
+    ];
     private $_intentInfo = [];
     private $_extraInfo1 = [];
     private $_extraInfo2 = [];
@@ -170,7 +179,8 @@ class aiChatBot {
         $data = [
             'model'         =>  $this->_apiModel,
             'messages'      =>  $client_message,
-            'max_tokens'    =>  600,
+            //'temperature'   =>  0,
+            'max_tokens'    =>  400,
         ];
         
         if ($tools) {
@@ -212,6 +222,9 @@ class aiChatBot {
     function chat($client_message) {
         // 1. 先判斷客戶意圖
         $this->_intentInfo = $this->determineIntent($client_message);
+        if(empty($this->_intentInfo)) {
+            return '抱歉，我暫時無法理解您的問題。';
+        }
    
         if($this->_debugMode) {
             echo '<pre>';
@@ -220,8 +233,7 @@ class aiChatBot {
             print_r($this->_intentInfo);
             echo '</pre>';
         }
-
-
+  
         // 3. 根據客戶意圖回答, 如果回復包含額外function, 則需要做第二請求
         $answer = [];
         $log_messages = $this->loadMessages();
@@ -513,7 +525,7 @@ class aiChatBot {
     }
     
     function determineIntent($client_message) {
-        $result = ['index' => 7, 'short' => '7|其他', 'products' => '', 'description' => ''];
+        $result = [];
         
         // Determine intent based on customer information
         if(!empty($client_message)) {
@@ -531,192 +543,32 @@ class aiChatBot {
             $log_messages = array_merge([['role' => 'system', 'content' => $this->initSystmPrompt()]], $log_messages);
 
             $response = $this->doCurl($log_messages, null, 30);
-            $intent_reply = ($response['choices'][0]['message']['content'] ?? '7|其他');
-            if (preg_match('/([1-5])\|([^\|]+)(?:\|([^\n\r]+))?/', $intent_reply, $m)) {
+            $intent_reply = ($response['choices'][0]['message']['content'] ?? '');
+            if (preg_match('/^(\d+)\|([^\|]+)(?:\|([^\n\r]+))?/', $intent_reply, $m)) {
                 $intent_reply = implode('|', array_slice($m, 1));
-            } else {
-                $intent_reply = '7|其他';
             }
-
-            // Convert to array
-            $parts = explode('|', $intent_reply);
-            $result['index'] = intval($parts[0] ?? 7);
-            $result['short'] = trim($parts[1]);
-            $result['products'] = trim($parts[2] ?? ''); 
-            $result['description'] = $intent_reply;
             
-            // Save history log
-            $this->saveMessages($client_message, 'user');
+            if(!empty($intent_reply)) {
+                $parts = explode('|', $intent_reply);
+                if(!empty($this->_intentOptions[intval($parts[0])])) {
+                    $result['index'] = intval($parts[0]);
+                    $result['short'] = trim($parts[1]);
+                    $result['products'] = (in_array($result['index'], [2,3])? (trim($parts[2] ?? '')) : '');
+                    $result['orders'] = (in_array($result['index'], [6])? (trim($parts[2] ?? '')) : '');
+                    $result['description'] = $intent_reply;
+
+                    // Save history log
+                    $this->saveMessages($client_message, 'user');
+                }
+            }
         }
 
         return $result;
     }
     
     function initSystmPrompt($intent = []) {
-        $intent_description = implode(PHP_EOL, 
-        [
-            '1|查詢商品: 詢問商品功能、價格、規格、庫存。',
-            '2|添加商品: 表達購買意願、加入購物車或下單。',
-            '3|調整商品: 修改或刪除購物車商品。',
-            '4|查閱購物車: 查看購物車商品或總額。',
-            '5|確認訂單: 結帳、生成訂單或付款。',
-            '6|查閱訂單: 查詢已下訂單詳情或進度。',
-            '7|其他: 非交易問題，如營業時間、售後、聯絡方式。'
-        ]);
-        
-        $cases = [
-            // view_product - 查詢商品
-            [
-                '你們沒有{商品A}？',
-                '1|查詢商品|商品A'
-            ],
-            [
-                '{商品A}和{商品B}',
-                '1|查詢商品|{商品A}#{商品B}'
-            ],
-            [
-                '{商品A}今天價格?',
-                '1|查詢商品|{商品A}'
-            ],
-            [
-                '我想購買{商品A}',
-                '1|查詢商品|{商品A}'
-            ],
-            [
-                '{商品A}有現貨嗎？',
-                '1|查詢商品|{商品A}'
-            ],
-
-            // add_to_cart - 添加購物車
-            [
-                '2件{商品A}',
-                '2|添加商品|{商品A}*2'
-            ],
-            [
-                '2件{商品A}和1個{商品B}',
-                '2|添加商品|{商品A}*2#{商品B}*1'
-            ],
-            [
-                '加入{商品A}',
-                '2|添加商品|{商品A}*1'
-            ],
-            [
-                '{商品A}買三個',
-                '2|添加商品|{商品A}*3'
-            ],
-
-            // revise_cart - 調整購物車
-            [
-                '{商品A}要1件就可以',
-                '3|調整商品|{商品A}*1'
-            ],
-            [
-                '{商品A}要1件，{商品B}則要2個就可以',
-                '3|調整商品|{商品A}*1#{商品B}*2'
-            ],
-            [
-                '不要{商品B}了',
-                '3|調整商品|{商品B}*0'
-            ],
-            [
-                '{商品A}改為3個',
-                '3|調整商品|{商品A}*3'
-            ],
-            [
-                '刪除{商品B}',
-                '3|調整商品|{商品B}*0'
-            ],
-
-            // view_cart - 查看購物車
-            [
-                '我的購物車',
-                '4|查閱購物車'
-            ],
-            [
-                '我買了什麼',
-                '4|查閱購物車'
-            ],
-            [
-                '購物車內容',
-                '4|查閱購物車'
-            ],
-            [
-                '看一下購物車',
-                '4|查閱購物車'
-            ],
-
-            // confirm_order - 確認訂單
-            [
-                '結賬',
-                '5|確認訂單'
-            ],
-            [
-                '付款',
-                '5|確認訂單'
-            ],
-            [
-                '我要結帳',
-                '5|確認訂單'
-            ],
-            [
-                '去付款',
-                '5|確認訂單'
-            ],
-
-            // view_order - 查看訂單
-            [
-                '我的訂單',
-                '6|查閱訂單'
-            ],
-            [
-                '訂單記錄',
-                '6|查閱訂單'
-            ],
-            [
-                '歷史訂單',
-                '6|查閱訂單'
-            ],
-            [
-                '查一下我的訂單',
-                '6|查閱訂單'
-            ],
-            [
-                '訂單編號 68452',
-                '6|查閱訂單'
-            ],
-
-            // others - 其他詢問
-            [
-                '你們的營業時間?',
-                '7|其他'
-            ],
-            [
-                '送貨服務',
-                '7|其他'
-            ],
-            [
-                '運費多少錢？',
-                '7|其他'
-            ],
-            [
-                '客服電話',
-                '7|其他'
-            ],
-            [
-                '退貨政策',
-                '7|其他'
-            ]
-        ];
-        $cases_description = [];
-        foreach ($cases as $case) {
-            $case[0] = '「'.$case[0].'」';
-            $cases_description[] = implode(' → ', $case);
-        }
-        $cases_description = implode(PHP_EOL, $cases_description);
-        
-        // output
         if(!empty($intent['short'])) {
-            $ref_short = $intent['index'].'|'.$intent['short'];
+            $ref_short = PHP_EOL.'「客戶意圖」'.PHP_EOL.$intent['index'].'|'.$intent['short'];
             $ref_products = '';
             if(!empty($intent['products'])) {
                 $ref_products = [];
@@ -731,19 +583,16 @@ class aiChatBot {
                 }
             }
             if(!empty($ref_products)) {
-                $ref_products = PHP_EOL.PHP_EOL.'商品清單:'.PHP_EOL.implode(PHP_EOL, $ref_products);
+                $ref_products = PHP_EOL.PHP_EOL.'「商品清單」'.PHP_EOL.implode(PHP_EOL, $ref_products);
             }
             
             $system_prompt = <<<PROMPT
             本次對話ID： {$this->_sessionID}
             
             你是專業客服助理，協助客戶處理商品查詢、購物車、訂單及一般客服問題。
-                    
-            若無法回答，請回覆：「關於您詢問的問題，目前暫無相關資料，敬請見諒。」
-                    
-            現在已知道客戶訊息對應的「意圖」和「商品清單」，請進行最終操作並進行回覆。
- 
-            當前客戶意圖：
+      
+            現在已知道「客戶意圖」和「商品清單/訂單編號」，請進行對應操作並進行回覆。
+            
             {$ref_short}{$ref_products}
             
             如果意圖是：
@@ -757,45 +606,79 @@ class aiChatBot {
                     
             ** function 如有對應參數（例如 {product_name}, {quantity}），請一併提供。**
                 
-            [其他資訊]
+            「其他資訊」
             - 運費：基本 HK$50，滿 HK$300 免運費
             
-            [重要規則]
+            「重要規則」
             - 回覆時使用客戶原語言（繁中對繁中，英文對英文）。
             - 回覆內容必須嚴格基於提供的參考資料，嚴禁編造不存在的資訊。
+            - 無法回覆時，請使用「關於您詢問的問題，目前暫無相關資料，敬請見諒。」
             - 商品ID {product_id} 僅供內部使用，不顯示給客戶。
             PROMPT;
         }
         else {
+            $intent_description = [];
+            if(!empty($this->_intentOptions)) {
+                foreach ($this->_intentOptions as $intent_key => $intent) {
+                    $intent_description[] = $intent_key.'|'.$intent['title'];
+                }
+            }
+            $intent_description = implode(PHP_EOL, $intent_description);
+            
+            $cases = 
+            [
+                // view_product - 查詢商品
+                ['你們沒有{商品A}？', '1|查詢商品|商品A'],
+                ['{商品A}和{商品B}', '1|查詢商品|{商品A}#{商品B}'],
+                ['{商品A}有貨嗎？', '1|查詢商品|{商品A}'],
+
+                // add_to_cart - 添加購物車
+                ['2件{商品A}', '2|添加商品|{商品A}*2'],
+                ['2件{商品A}和1個{商品B}', '2|添加商品|{商品A}*2#{商品B}*1'],
+
+                // revise_cart - 調整購物車
+                ['{商品A}改為1件', '3|調整商品|{商品A}*1' ],
+                ['{商品A}要1件，{商品B}則要2個', '3|調整商品|{商品A}*1#{商品B}*2'],
+                ['不要{商品B}了', '3|調整商品|{商品B}*0'],
+
+                // view_cart - 查看購物車
+                ['我的購物車', '4|查閱購物車'],
+                ['我買了什麼', '4|查閱購物車'],
+
+                // confirm_order - 確認訂單
+                ['結賬', '5|確認訂單'],
+                ['付款', '5|確認訂單'],
+
+                // view_order - 查看訂單
+                ['我的訂單', '6|查閱訂單'],
+                ['訂單 {訂單編號}','6|查閱訂單|{訂單編號}'],
+
+                // others - 其他詢問
+                ['你們的營業時間?', '7|其他'],
+                ['送貨服務', '7|其他']
+            ];
+            $cases_description = [];
+            foreach ($cases as $case) {
+                $cases_description[] = '- '.implode(' → ', $case);
+            }
+            $cases_description = implode(PHP_EOL, $cases_description);
+
             $system_prompt = <<<PROMPT
-            本次對話ID： {$this->_sessionID}
-            
-            您是一位專門負責意圖識別的專家，根據客戶訊息進行精準分析，然後正確判斷其意圖，並嚴格返回以下格式。
-                    
-            [意圖選項]
-            {$intent_description}
-            
-            [判斷規則]
-            1. 如果訊息中提到商品名稱  
-               - 詢問商品資訊 → 1|查詢商品  
-               - 表示購買／加入購物車 → 2|添加商品  
-               - 修改購物車數量或刪除商品 → 3|調整商品
-            2. 查看購物車相關訊息 → 4|查閱購物車。
-            3. 結帳或付款相關訊息 → 5|確認訂單。
-            4. 如果訊息中包含「訂單編號」「我的訂單」「查訂單」等關鍵字 → 6|查閱訂單
-            5. 其他非交易問題判定 → 7|其他。
+            你是意圖識別專家，根據客戶訊息返回對應的「意圖結果」。
 
-            [回覆規範]
-            - 只能選擇[意圖選項]其中一項
-            - 格式:「意圖編號|意圖名稱|商品名稱」
-            - 僅當訊息明確提及商品名稱時填寫，多個用 # 分隔
-            - 不得包含其他文字、符號或表情
+            「意圖選項」
+            {$intent_description}     
 
-            [參考範例]
+            「意圖結果」
+            - 只能為「意圖選項」其中一項
+            - 格式必須為「意圖編號|意圖名稱」，「意圖編號|意圖名稱|商品名稱」或「意圖編號|意圖名稱|訂單編號」。
+            - 當訊息明確提及 {商品名稱} 或 {訂單編號} 時才補充第三欄。
+            - 若訊息包含多個 {商品名稱} 或 {訂單編號}，請用`#`分隔。
+            - 若訊息包含 {商品名稱} 和 {商品數量}，第三欄格式則為 {商品名稱}*{商品數量}。
+            
+            「範例」
             {$cases_description}
-
-            ** 僅輸出結果，不得包含其他說明或符號。**
-            PROMPT; 
+            PROMPT;
         }
 
         return $system_prompt;
