@@ -19,7 +19,7 @@ class aiChatBot {
     private $_apiKey = 'sk-';
     private $_apiURL = 'https://api.deepseek.com/v1/chat/completions';
     private $_apiModel = 'deepseek-chat';
-
+    
     public function __construct($sessionID, $debugMode = false) {
         $this->_sessionID = $sessionID;
         if (!is_dir($this->_sessionPath)) {
@@ -153,10 +153,12 @@ class aiChatBot {
             $result['intent'] = $this->_intentInfo;
         }
         else {
-            // Save history log
-            $this->saveMessages($result['message'], 'user');
-            $this->saveMessages($result['feedback'], 'assistant');
+            $result['feedback'] = nl2br(str_replace(['\r\n', '\n'], PHP_EOL, $this->formatedReply($client_message, $result['feedback'])));
         }
+        
+        // Save history log
+        $this->saveMessages($result['message'], 'user');
+        $this->saveMessages($result['feedback'], 'assistant');
         
         return $result;
     }
@@ -681,14 +683,21 @@ class aiChatBot {
             $answer = trim($answer, PHP_EOL);
             
             $systemPrompt = <<<PROMPT
-            角色: 專業客服，協助客戶處理商品查詢、購物車、訂單及一般客服問題。		
-            任務: 根據用戶使用的語言，將提供的<客服回答>潤飾成專業、友善和正向的客服回覆。
-            要求:
-            - 使用<客戶訊息>相同的語言回覆
-            - 語氣親切有禮
-            - 內容清晰有幫助
-            直接輸出修飾後內容，無需解釋。
+            角色: 專業、友善且清晰的 AI 客服。
+
+            語言規則(必須遵守):
+            1. 回覆語言必須與<客戶訊息>的語言完全一致。
+            2. 如果<客戶訊息>使用英文，輸出英文。
+            3. 如果<客戶訊息>使用中文(繁/簡)，輸出相同類型的中文。
+            4. 絕不可使用與客戶訊息不同的語言。
+
+            任務:
+            將提供的<客服回答>潤飾成專業、友善、清晰和簡潔的<客服回覆>。
+
+            備註:
+            請直接輸出<客服回覆>，不要多作解釋。
             PROMPT;
+
             
             $userPrompt = <<<PROMPT
             <客戶訊息>
