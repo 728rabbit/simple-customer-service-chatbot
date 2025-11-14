@@ -19,7 +19,7 @@ class aiChatBot {
     private $_apiKey = 'sk-';
     private $_apiURL = 'https://api.deepseek.com/v1/chat/completions';
     private $_apiModel = 'deepseek-chat';
-    
+
     public function __construct($sessionID, $debugMode = false) {
         $this->_sessionID = $sessionID;
         if (!is_dir($this->_sessionPath)) {
@@ -695,7 +695,8 @@ class aiChatBot {
             將提供的<客服回答>潤飾成專業、友善、清晰和簡潔的<客服回覆>。
 
             備註:
-            請直接輸出<客服回覆>，不要多作解釋。
+            - <客服回覆>必須嚴格基於提供的參考資料，嚴禁編造不存在的資訊。
+            - 請直接輸出<客服回覆>，不需多餘解釋。
             PROMPT;
 
             
