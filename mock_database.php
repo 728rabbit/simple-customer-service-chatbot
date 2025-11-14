@@ -326,25 +326,20 @@ class MockDatabase {
                 'session_id' => $session_id, // 关联 Session ID
                 'customer_name' => $customer_info['name'],
                 'customer_phone' => $customer_info['phone'],
-                'customer_email' => $customer_info['email'] ?? '',
+                'customer_address' => $customer_info['address'],
                 'items' => $cart,
                 'items_total' => $total_amount,
                 'shipping_fee' => $shipping_fee,
                 'grand_total' => $total_amount + $shipping_fee,
                 'status' => '待確認',
                 'created_at' => date('Y-m-d H:i:s'),
-                'shipping_address' => $customer_info['address']
             ];
             
             if (isset($_SESSION['shopping_carts'][$session_id])) {
                 $_SESSION['shopping_carts'][$session_id] = [];
             }
             
-            return [
-                'order_id' => $new_order_id,
-                'order_details' => $_SESSION['order_database'][$new_order_id],
-                'requires_confirmation' => true
-            ];
+            return $_SESSION['order_database'][$new_order_id];
         }
         
         return false;
