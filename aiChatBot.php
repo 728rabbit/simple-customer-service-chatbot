@@ -13,15 +13,6 @@ class aiChatBot {
     private $_debugMode = false;
     private $_sessionID;
     private $_sessionPath = 'sessions/';
-    private $_intentOptions = [
-        1 => ['title' => '商品查詢', 'content' => '功能、價格、規格、庫存', 'function' => 'view_product'],
-        2 => ['title' => '加入購物車', 'content' => '購買意願、加入購物車', 'function' => 'add_to_cart'],
-        3 => ['title' => '修改購物車', 'content' => '刪減或修改商品數量', 'function' => 'revise_cart'],
-        4 => ['title' => '查看購物車', 'content' => '商品清單、總金額', 'function' => 'view_cart'],
-        5 => ['title' => '確認訂單', 'content' => '結帳、付款操作', 'function' => 'confirm_order'],
-        6 => ['title' => '訂單查詢', 'content' => '訂單詳情、進度', 'function' => 'view_order'],
-        7 => ['title' => '其他問題', 'content' => '營業時間、售後服務'],
-    ];
     private $_intentInfo = [];
     private $_extraInfo1 = [];
     private $_extraInfo2 = [];
@@ -179,7 +170,7 @@ class aiChatBot {
         $data = [
             'model'         =>  $this->_apiModel,
             'messages'      =>  $client_message,
-            'temperature'   =>  0,
+            //'temperature'   =>  0,
             'max_tokens'    =>  1000,
         ];
         
@@ -220,8 +211,10 @@ class aiChatBot {
 
     // Core
     function chat($client_message) {
+        sleep(1);
+        
         // 1. 先判斷客戶意圖
-        $this->_intentInfo = $this->determineIntent($client_message);
+        $this->_intentInfo = $this->detectIntent($client_message);
         if(empty($this->_intentInfo)) {
             return '抱歉，我暫時無法理解您的問題。';
         }
@@ -233,283 +226,38 @@ class aiChatBot {
             print_r($this->_intentInfo);
             echo '</pre>';
         }
-  
-        // 3. 根據客戶意圖回答, 如果回復包含額外function, 則需要做第二請求
+        
+        // 2. 根據客戶意圖進行進一步操作
         $answer = [];
-        $log_messages = $this->loadMessages();
-        if(!empty($log_messages)) {
-            $log_messages = array_slice($log_messages, (($this->_maxRoundsDialogue*2+1)*-1)); // first 5 rounds of dialogue
-        }
-        $system_message = ['role' => 'system', 'content' => $this->initSystmPrompt($this->_intentInfo)];
-
-        $response = $this->doCurl(array_merge([$system_message], $log_messages), $this->toolFunctions(), 30);
-        $first_reply = ($response['choices'][0]['message'] ?? []);
-        $this->_extraInfo1 = $first_reply;
-        
-        if($this->_debugMode && false) {
-            echo '<pre>';
-            echo 'First Reply:<br/>';
-            print_r($first_reply);
-            echo '</pre>';
-        }
-        
-        if (isset($first_reply['tool_calls']) && !empty($first_reply['tool_calls'])) {
-            $tool_messages = 
-            [
-                ['role' => 'assistant', 'content' => ($first_reply['content'] ?? ''), 'tool_calls' => $first_reply['tool_calls']]
-            ];
-            
-            foreach ($first_reply['tool_calls'] as $tool_call) {
-                $function_name = $tool_call['function']['name'];
-                $function_args = json_decode($tool_call['function']['arguments'], true);
-                $function_result = [];
-                
-                switch (strtolower($function_name)) {
-                    case 'view_product':
-                        $product_name = ($function_args['product_name'] ?? '');
-                        if(!empty($product_name)) {
-                            $allProducts = MockDatabase::queryAllProducts($product_name);
-                            if (!empty($allProducts)) {
-                                foreach ($allProducts as $localProduct) {
-                                    $function_result['related_products'][] = [
-                                        'product_id'    =>  $localProduct['product_id'],
-                                        'title'         =>  $localProduct['title'],
-                                        'origin'        =>  $localProduct['origin'],
-                                        'description'   =>  $localProduct['description'],
-                                        'price'         =>  $localProduct['price_currency'] . ' ' . number_format($localProduct['price']) . '/' . $localProduct['price_unit']
-                                    ];
-                                }
-                                $function_result['message'] =  '找到 ' . count($function_result['related_products']) . ' 件相關產品';
-                            }
-                        }
-                        else {
-                            $function_result['error_message'] = '我們的商店找不到相關商品。';
-                        }
-                        break;
-                        
-                    case 'add_to_cart':
-                        $product_name = $function_args['product_name'] ?? '';
-                        $quantity = max(1, $function_args['quantity'] ?? 1);
-                        if(!empty($product_name) && !empty($quantity)) {
-                            $allProducts = MockDatabase::queryAllProducts($product_name);
-                            if(!empty($allProducts)) {
-                                if(count($allProducts) > 1) {
-                                    $function_result = [
-                                        'error_message' => '我們的商店，包含多件相關商品，請明確你需要的商品。',
-                                        'related_products' => []
-                                    ];
-
-                                    foreach ($allProducts as $localProduct) {
-                                        $function_result['related_products'][] = [
-                                            'product_id'    =>  $localProduct['product_id'],
-                                            'title'         =>  $localProduct['title'],
-                                            'origin'        =>  $localProduct['origin'],
-                                            'description'   =>  $localProduct['description'],
-                                            'price'         =>  $localProduct['price_currency'] . ' ' . number_format($localProduct['price']) . '/' . $localProduct['price_unit']
-                                        ];
-                                    }
-                                }
-                                else {
-                                    $target_product = reset($allProducts);
-                                    $shopping_cart = MockDatabase::addToCart($target_product['product_id'], $function_args['quantity']);
-                                    if (!empty($shopping_cart)) {
-                                        $total_items = 0;
-                                        $total_amount = 0;
-                                        $shopping_cart_details = '購物車内容:';
-                                        $item_count = 1;
-                                        foreach ($shopping_cart as $item) {
-                                            $total_items += $item['quantity'];
-                                            $total_amount += $item['price'] * $item['quantity'];
-
-                                            $shopping_cart_details.= PHP_EOL;
-                                            $shopping_cart_details.= $item_count.'. '.$item['title'].' × '. $item['quantity'].' =  HK$'. ($item['price'] * $item['quantity']);
-                                            $item_count++;
-                                        }
-                                        $shopping_cart_details.= PHP_EOL;
-                                        $shopping_cart_details.= '總計:'. $total_items. '件商品，HK$'.$total_amount;
-
-                                        $function_result = 
-                                        [
-                                            'shopping_cart' =>  $shopping_cart,
-                                            'message'       =>  $shopping_cart_details,
-                                            'total_items'   =>  $total_items,
-                                            'total_amount'  =>  $total_amount
-                                        ];
-                                    }
-                                }
-                            }
-                            else {
-                                $function_result['error_message'] = '我們的商店找不到相關商品。';
-                            }
-                        }
-                        break;
-                        
-                    case 'revise_cart_qty':
-                        $product_name = $function_args['product_name'] ?? '';
-                        $quantity = max(1, $function_args['quantity'] ?? 1);
-                        $target_product = [];
-                        
-                        if(!empty($product_name) && !empty($quantity)) {
-                            $allProducts = MockDatabase::queryAllProducts($product_name);
-                            if(!empty($allProducts)) {
-                                $shopping_cart = MockDatabase::getCart();
-                                if(!empty($shopping_cart)) {
-                                    // find target product in current shopping cart
-                                    foreach ($allProducts as $localProduct) {
-                                        foreach ($shopping_cart as $cart) {
-                                            if($localProduct['product_id'] == $cart['product_id']) {
-                                                $target_product[] = $localProduct;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        
-                        if(!empty($target_product)) {
-                            if(count($target_product) > 1) {
-                                $function_result = 
-                                [
-                                    'error_message' => '您的購物車包含多件相關商品，請明確你需要操作的商品。',
-                                    'shopping_cart' =>  $shopping_cart,
-                                ];
-                            }
-                            else {
-                                $target_product = reset($target_product);
-                                $shopping_cart = MockDatabase::reviseCart($target_product['product_id'], $function_args['quantity']);
-                                if (empty($shopping_cart)) {
-                                    $function_result['error_message'] = '更新購物車不成功，請稍後再嘗試。';
-                                }
-                                else {
-                                    $total_items = 0;
-                                    $total_amount = 0;
-                                    $shopping_cart_details = '購物車内容:';
-                                    $item_count = 1;
-                                    foreach ($shopping_cart as $item) {
-                                        $total_items += $item['quantity'];
-                                        $total_amount += $item['price'] * $item['quantity'];
-
-                                        $shopping_cart_details.= PHP_EOL;
-                                        $shopping_cart_details.= $item_count.'. '.$item['title'].' × '. $item['quantity'].' =  HK$'. ($item['price'] * $item['quantity']);
-                                        $item_count++;
-                                    }
-                                    $shopping_cart_details.= PHP_EOL;
-                                    $shopping_cart_details.= '總計:'. $total_items. '件商品，HK$'.$total_amount;
-
-                                    $function_result = 
-                                    [
-                                        'shopping_cart' =>  $shopping_cart,
-                                        'message'       =>  $shopping_cart_details,
-                                        'total_items'   =>  $total_items,
-                                        'total_amount'  =>  $total_amount
-                                    ];
-                                }
-                            }
-                        }
-                        else {
-                            $function_result['error_message'] = '您的購物車内找不到相關商品。';
-                        }
-                        break;
-                        
-                    case 'view_cart':
-                        $shopping_cart = MockDatabase::getCart();
-                        if(empty($shopping_cart)) {
-                            $function_result['error_message'] = '您的購物車尚未添加商品';
-                        }
-                        else {
-                            $total_items = 0;
-                            $total_amount = 0;
-                            $shopping_cart_details = '購物車内容:';
-                            $item_count = 1;
-                            foreach ($shopping_cart as $item) {
-                                $total_items += $item['quantity'];
-                                $total_amount += $item['price'] * $item['quantity'];
-
-                                $shopping_cart_details.= PHP_EOL;
-                                $shopping_cart_details.= $item_count.'. '.$item['title'].' × '. $item['quantity'].' =  HK$'. ($item['price'] * $item['quantity']);
-                                $item_count++;
-                            }
-                            $shopping_cart_details.= PHP_EOL;
-                            $shopping_cart_details.= '總計:'. $total_items. '件商品，HK$'.$total_amount;
-
-                            $function_result = 
-                            [
-                                'shopping_cart' =>  $shopping_cart,
-                                'message'       =>  $shopping_cart_details,
-                                'total_items'   =>  $total_items,
-                                'total_amount'  =>  $total_amount
-                            ];
-                        }
-                        break;
-                        
-                    case 'confirm_order':
-                        $shopping_cart = MockDatabase::getCart();
-                        if(empty($shopping_cart)) {
-                            $function_result['error_message'] = '您的購物車尚未添加商品';
-                        }
-                        else {
-                            if(!empty($function_args['customer_name']) && !empty($function_args['customer_phone']) && !empty($function_args['customer_address'])) {
-                                $newOrder = MockDatabase::createOrderFromCart([
-                                    'name' => $function_args['customer_name'],
-                                    'phone' => $function_args['customer_phone'],
-                                    'address' => $function_args['customer_address']
-                                ]);
-                                $function_result['message'] = '訂單已創建！訂單號:'.$newOrder['order_details']['order_id'].'總金額:HK$'.$newOrder['order_details']['grand_total'];
-                            }
-                            else {
-                                $function_result['error_message'] = '請提供你的姓名，電話和地址，以便確認訂單。';
-                            }
-                        }
-                        break;
-                        
-                    case 'view_order':
-                        if(empty($function_args['order_number'])) {
-                            $function_result['error_message'] = '請提供你的訂單編號。';
-                        }
-                        else {
-                            $newOrder = MockDatabase::queryOrder($function_args['order_number']);
-                            if(!empty($newOrder)) {
-                                $function_result = $newOrder;
-                            }
-                            else {
-                                $function_result['error_message'] = '找不到此訂單。';
-                            }
-                        }
-                }
-                
-                if(empty($function_result)) {
-                    $function_result['message'] = '關於您詢問的問題，目前暫無相關資料，敬請見諒。'; 
-                }
-                
-                $tool_messages[] = [
-                    'role' => 'tool',
-                    'tool_call_id' => $tool_call['id'],
-                    'content' => json_encode($function_result, JSON_UNESCAPED_UNICODE)
-                ];
-            }
-            
-            $this->_extraInfo2 = $tool_messages;
-            
-            if($this->_debugMode) {
-                echo '<pre>';
-                echo 'Tool_messages:<br/>';
-                print_r($tool_messages);
-                echo '</pre>';
-            }
-            
-            // 第二請求
-            $second_response = $this->doCurl(array_merge([$system_message], $log_messages, $tool_messages), null, 30);
-            $answer = $second_response['choices'][0]['message']['content'] ?? '';
-        }
-        else if(!empty($first_reply['content'])){
-            $answer = $first_reply['content'];
+        switch ((int)$this->_intentInfo['intent_id']) {
+            case 1:
+                $answer = $this->viewProducts($this->_intentInfo);
+                break;
+            case 2:
+                $answer = $this->addToCart($this->_intentInfo);
+                break;
+            case 3:
+                $answer = $this->reviseCartQty($this->_intentInfo);
+                break;
+            case 4:
+                $answer = $this->viewCart($this->_intentInfo);
+                break;
+            case 5:
+                $answer = $this->confirmOrder($this->_intentInfo);
+                break;
+            case 6:
+                $answer = $this->viewOrder($this->_intentInfo);
+                break;
         }
         
+        // 3. 優化輸出的答案
         if(empty($answer)) {
-            $answer = '關於您詢問的問題，目前暫無相關資料，敬請見諒。';
+            $answer = '抱歉，我暫時無法理解您的問題。';
         }
-        
+        $answer = $this->formatedReply($client_message, $answer);
+
         // Save history log
+        $this->saveMessages($client_message, 'user');
         $this->saveMessages($answer, 'assistant');
 
         if($this->_debugMode) {
@@ -524,11 +272,67 @@ class aiChatBot {
         }
     }
     
-    function determineIntent($client_message) {
-        $result = [];
-        
+    function detectIntent($client_message) {
         // Determine intent based on customer information
         if(!empty($client_message)) {
+            $systemPrompt = <<<PROMPT
+            您是意圖識別專家，負責根據客戶訊息輸出對應的意圖 JSON 結果。
+
+            <意圖選項>: 
+            1. 商品查詢: 功能、價格、規格、庫存
+            2. 加入購物車: 購買意願、加入購物車
+            3. 修改購物車: 刪減或修改商品數量
+            4. 查看購物車: 商品清單、總金額
+            5. 確認訂單: 結帳/付款(customer_info array，含 name/phone/address，可分步補齊)
+            6. 訂單查詢: 訂單詳情、進度
+            7. 其他問題: 營業時間、售後服務
+
+            <輸出規則>: 
+            1. 模型必須輸出 JSON，不可以有額外文字。
+            2. JSON 結構如下: 
+               - intent_id (number): 意圖編號 1~7
+               - intent_name (string): 意圖名稱
+               - items (array，可選): 商品列表，每項可包含 name (商品名稱) 與 qty (數量)
+               - order_numbers (array，可選): 訂單編號列表
+               - customer_info (array，可選，僅 intent_id=5): 包含以下欄位
+                    - name (string，可選)
+                    - phone (string，可選)
+                    - address (string，可選)
+            3. 只能輸出一個意圖。
+            4. 若訊息有商品名稱，必填 items。
+            5. 若商品有數量，需以 qty 標示。
+            6. 多個商品用 items 多筆呈現。
+            7. 多個訂單編號用 order_numbers 陣列呈現。
+            8. 若無商品或訂單編號，不需提供 items 或 order_numbers。
+            9. 對於確認訂單意圖: 
+               - 如果使用者尚未提供聯絡資訊，可先輸出空的 customer_info 或缺少欄位的 JSON。
+               - 後續使用者補充聯絡資訊時，模型應保持 thread context，將欄位補齊到同一個 intent JSON。
+            10. JSON 必須合法，不能有多餘文字。
+
+            <範例>: 
+            - 您們沒有商品A？ → {"intent_id":1,"intent_name":"商品查詢","items":[{"name":"商品A"}]}
+            - 商品A和商品B" → {"intent_id":1,"intent_name":"商品查詢","items":[{"name":"商品A"},{"name":"商品B"}]}
+            - {商品A}有貨嗎？ → {"intent_id":1,"intent_name":"商品查詢","items":[{"name":"商品A"}]}
+
+            - 2件商品A → {"intent_id":2,"intent_name":"加入購物車","items":[{"name":"商品A","qty":2}]}
+            - 2件商品A和1個商品B → {"intent_id":2,"intent_name":"加入購物車","items":[{"name":"商品A","qty":2},{"name":"商品B","qty":1}]}
+            - 加多1個商品B → {"intent_id":2,"intent_name":"加入購物車","items":[{"name":"商品B","qty":1}]}
+                    
+            - 商品A要1個就可以 → {"intent_id":3,"intent_name":"調整商品","items":[{"name":"商品A","qty":1}]}
+            - 商品A改為1件 → {"intent_id":3,"intent_name":"修改購物車","items":[{"name":"商品A","qty":1}]}
+            - 不需要商品B了 → {"intent_id":3,"intent_name":"修改購物車","items":[{"name":"商品B","qty":0}]}
+
+            - 我的購物車 → {"intent_id":4,"intent_name":"查看購物車"}
+                    
+            - 結賬 → {"intent_id":5,"intent_name":"確認訂單","customer_info":[]}
+            - 王小明，12345678，香港中環德輔道中151號" → {"intent_id":5,"intent_name":"確認訂單","customer_info":{"name":"王小明","phone":"12345678","address":"香港中環德輔道中151號"}}
+            
+            - 我的訂單 → {"intent_id":6,"intent_name":"訂單查詢","order_numbers":[]}
+            - 訂單 ABC123 → {"intent_id":6,"intent_name":"訂單查詢","order_numbers":["ABC123"]}
+                    
+            - 您們的營業時間? → {"intent_id":7,"intent_name":"其他問題"}
+            PROMPT;
+            
             $allProducts = MockDatabase::queryAllProducts($client_message);
             if (!empty($allProducts)) {
                 $client_message = '請問 "'.$client_message.'" 嘅資訊？';
@@ -536,264 +340,382 @@ class aiChatBot {
 
             $log_messages = $this->loadMessages();
             if(!empty($log_messages)) {
-                $log_messages = array_slice($log_messages, (($this->_maxRoundsDialogue*2)*-1)); // first 5 rounds of dialogue
+                $log_messages = array_slice($log_messages, (($this->_maxRoundsDialogue*2)*-1));
             }
-     
             $log_messages[] = ['role' => 'user', 'content' => $client_message];
-            $log_messages = array_merge([['role' => 'system', 'content' => $this->initSystmPrompt()]], $log_messages);
-
+            $log_messages = array_merge([['role' => 'system', 'content' => $systemPrompt]], $log_messages);
+            
             $response = $this->doCurl($log_messages, null, 30);
             $intent_reply = ($response['choices'][0]['message']['content'] ?? '');
-            if (preg_match('/^(\d+)\|([^\|]+)(?:\|([^\n\r]+))?/', $intent_reply, $m)) {
-                $intent_reply = implode('|', array_slice($m, 1));
-            }
-            
             if(!empty($intent_reply)) {
-                $parts = explode('|', $intent_reply);
-                if(!empty($this->_intentOptions[intval($parts[0])])) {
-                    $result['index'] = intval($parts[0]);
-                    $result['short'] = trim($parts[1]);
-                    $result['products'] = (in_array($result['index'], [1, 2,3])? (trim($parts[2] ?? '')) : '');
-                    $result['orders'] = (in_array($result['index'], [6])? (trim($parts[2] ?? '')) : '');
-                    $result['description'] = $intent_reply;
-
-                    // Save history log
-                    $this->saveMessages($client_message, 'user');
+                $intent_reply = json_decode($intent_reply, true);
+                if(!empty($intent_reply['intent_id'])) {
+                    return $intent_reply;
                 }
             }
         }
-
-        return $result;
+        
+        return false;
     }
     
-    function initSystmPrompt($current_intent = []) {
-        if(!empty($current_intent['short'])) {
-            $intent_function = [];
-            if(!empty($this->_intentOptions)) {
-                foreach ($this->_intentOptions as $intent_key => $intent) {
-                    if(!empty($intent['function'])) {
-                        $intent_function[] = $intent_key.'|'.$intent['title'].' → 必須呼叫 function: '.$intent['function'];
+    // 商品交易 functions
+    function viewProducts($intentInfo) {
+        $answer = [];
+        
+        if(!empty($intentInfo['items'])) {
+            foreach ($intentInfo['items'] as $item) {
+                $allProducts = MockDatabase::queryAllProducts($item['name']);
+                if(!empty($allProducts)) {
+                    $related_products = [];
+                    foreach ($allProducts as $localProduct) {
+                        $related_products[$localProduct['product_id']] = [
+                            'product_id'        =>  $localProduct['product_id'],
+                            'title'             =>  $localProduct['title'],
+                            'origin'            =>  $localProduct['origin'],
+                            'description'       =>  $localProduct['description'],
+                            'price_currency'    =>  $localProduct['price_currency'],
+                            'price'             =>  $localProduct['price'],
+                            'price_unit'        =>  $localProduct['price_unit'],
+                            'price_description' =>  $localProduct['price_currency'] . ' ' . number_format($localProduct['price']) . '/' . $localProduct['price_unit']
+                        ];
                     }
-                    else {
-                        $intent_function[] = $intent_key.'|'.$intent['title'].' → 直接用文字回覆，不需呼叫 function';
+                    $answer[] = PHP_EOL.'#商店有'.count($related_products).'款<'.$item['name'].'>。';
+                    foreach ($related_products as $product) {
+                        $answer[] = PHP_EOL.implode(PHP_EOL, [
+                            '名稱: '.$product['title'],
+                            '產地: '.$product['origin'],
+                            '描述: '.$product['description'],
+                            '價格: '.$product['price_description'],
+                        ]);
                     }
                 }
-            }
-            $intent_function = implode(PHP_EOL, $intent_function);
-            
-            $ref_short = PHP_EOL.'「客戶意圖」'.PHP_EOL.$current_intent['index'].'|'.$current_intent['short'];
-            $ref_products = '';
-            if(!empty($current_intent['products'])) {
-                $ref_products = [];
-                foreach (explode('#', $current_intent['products']) as $product) {
-                    preg_match('/^(.*)(\*)(\d+)$/i', $product, $match);
-                    if(!empty($match)) {
-                        $ref_products[] = 'product_name: '.$match[1].' | quantity: '.max(0, $match[3]);
-                    }
-                    else {
-                        $ref_products[] = 'product_name: '.$product;
-                    }
+                else {
+                    $answer[] = PHP_EOL.'#商店找不到<'.$item['name'].'>。';
                 }
             }
-            if(!empty($ref_products)) {
-                $ref_products = PHP_EOL.PHP_EOL.'「商品清單」'.PHP_EOL.implode(PHP_EOL, $ref_products);
-            }
-            
-            $system_prompt = <<<PROMPT
-            本次對話ID： {$this->_sessionID}
-            
-            你是專業客服助理，協助客戶處理商品查詢、購物車、訂單及一般客服問題。
-      
-            嚴格按照「客戶意圖」和「商品清單/訂單編號」資料，進行對應操作並並輸出回復結果。
-            
-            {$ref_short}{$ref_products}
-            
-            如果意圖是：
-            {$intent_function}
+        }
+        
+        return $answer;
+    }
+    
+    function addToCart($intentInfo) {
+        $answer = [];
+        
+        if(!empty($intentInfo['items'])) {
+            foreach ($intentInfo['items'] as $item) {
+                $allProducts = MockDatabase::queryAllProducts($item['name']);
+                if(!empty($allProducts)) {
+                    $related_products = [];
+                    foreach ($allProducts as $localProduct) {
+                        $related_products[$localProduct['product_id']] = [
+                            'product_id'        =>  $localProduct['product_id'],
+                            'title'             =>  $localProduct['title'],
+                            'origin'            =>  $localProduct['origin'],
+                            'description'       =>  $localProduct['description'],
+                            'price_currency'    =>  $localProduct['price_currency'],
+                            'price'             =>  $localProduct['price'],
+                            'price_unit'        =>  $localProduct['price_unit'],
+                            'price_description' =>  $localProduct['price_currency'] . ' ' . number_format($localProduct['price']) . '/' . $localProduct['price_unit']
+                        ];
+                    }
                     
-            ** function 如有對應參數（例如 {product_name}, {quantity}），請一併提供。**
-                
-            「其他資訊」
-            - 運費：基本 HK$50，滿 HK$300 免運費
+                    if(count($related_products) > 1) {
+                        $answer[] = PHP_EOL.'#商店有'.count($related_products).'款<'.$item['name'].'>，請明確您需要的商品。';
+                        foreach ($related_products as $product) {
+                            $answer[] = PHP_EOL.implode(PHP_EOL, [
+                                '名稱: '.$product['title'],
+                                '產地: '.$product['origin'],
+                                '描述: '.$product['description'],
+                                '價格: '.$product['price_description'],
+                            ]);
+                        }
+                    }
+                    else {
+                        $target_product = reset($related_products);
+                        $shopping_cart = MockDatabase::addToCart($target_product['product_id'], $item['qty']);
+                        if (!empty($shopping_cart)) {
+                            $answer[] = PHP_EOL.'#<'.$item['name'].'>已成功加到您購物車。';
+                        }
+                    }
+                }
+                else {
+                    $answer[] = PHP_EOL.'#商店找不到<'.$item['name'].'>。';
+                }
+            }
             
-            「重要規則」
-            - 回覆時使用客戶原語言（繁中對繁中，英文對英文）。
-            - 回覆內容必須嚴格基於提供的參考資料，嚴禁編造不存在的資訊。
-            - 無法回覆時，請使用「關於您詢問的問題，目前暫無相關資料，敬請見諒。」
-            - 商品ID {product_id} 僅供內部使用，不顯示給客戶。
-            PROMPT;
+            // Showing the latest shopping cart contents
+            $shopping_cart = MockDatabase::getCart();
+            if(!empty($shopping_cart)) {
+                $answer[] = PHP_EOL.'#最新購物車内容:';
+                
+                $total_items = 0;
+                $total_amount = 0;
+                $item_count = 1;
+                foreach ($shopping_cart as $item) {
+                    $answer[] = PHP_EOL.$item_count.'. '.$item['title'].' × '. $item['quantity'].' =  HK$'. ($item['price'] * $item['quantity']);
+                    $total_items += $item['quantity'];
+                    $total_amount += $item['price'] * $item['quantity'];
+                    $item_count++;
+                }
+                
+                $shipping_fee = 50;
+                if($total_amount >= 300) {
+                    $shipping_fee = 0;
+                }
+                
+                $answer[] = PHP_EOL.'共'. $total_items. '件商品，合計金額 HK$'.$total_amount;
+                $answer[] = PHP_EOL.'運費 HK$'.$shipping_fee;
+                $answer[] = PHP_EOL.'纍計總金額 HK$'.($total_amount + $shipping_fee);
+            }
+        }
+        
+        return $answer;
+    }
+    
+    function reviseCartQty($intentInfo) {
+        $answer = [];
+        
+        if(!empty($intentInfo['items'])) {
+            
+            foreach ($intentInfo['items'] as $item) {
+                $allProducts = MockDatabase::queryAllProducts($item['name']);
+                if(!empty($allProducts)) {
+                    $related_products = [];
+                    foreach ($allProducts as $localProduct) {
+                        $related_products[$localProduct['product_id']] = [
+                            'product_id'        =>  $localProduct['product_id'],
+                            'title'             =>  $localProduct['title'],
+                            'origin'            =>  $localProduct['origin'],
+                            'description'       =>  $localProduct['description'],
+                            'price_currency'    =>  $localProduct['price_currency'],
+                            'price'             =>  $localProduct['price'],
+                            'price_unit'        =>  $localProduct['price_unit'],
+                            'price_description' =>  $localProduct['price_currency'] . ' ' . number_format($localProduct['price']) . '/' . $localProduct['price_unit']
+                        ];
+                    }
+                    
+                    // find target product in current shopping cart
+                    $shopping_cart = MockDatabase::getCart();
+                    $target_product = [];
+                    foreach ($related_products as $product) {
+                        foreach ($shopping_cart as $cart) {
+                            if($product['product_id'] == $cart['product_id']) {
+                                $target_product[] = $product;
+                            }
+                        }
+                    }
+                    
+                    if(!empty($target_product)) {
+                        if(count($target_product) > 1) {
+                            $answer[] = PHP_EOL.'#現在購物車有'.count($target_product).'款<'.$item['name'].'>，請明確您需要操作的商品。';
+                        }
+                        else {
+                            $target_product = reset($target_product);
+                            $shopping_cart = MockDatabase::reviseCart($target_product['product_id'], $item['qty']);
+                            if(!empty($shopping_cart)) {
+                                if(!empty($item['qty'])) {
+                                    $answer[] = PHP_EOL.'#購物車内<'.$item['name'].'>的數量已更新。';
+                                }
+                                else {
+                                    $answer[] = PHP_EOL.'#<'.$item['name'].'>已從購物車移除。';
+                                }
+                            }
+                        }
+                    }
+                    else {
+                        $function_result['error_message'] = '#購物車内找不到<'.$item['name'].'>。';
+                    }
+                }
+            }
+            
+            // Showing the latest shopping cart contents
+            $shopping_cart = MockDatabase::getCart();
+            if(!empty($shopping_cart)) {
+                $answer[] = PHP_EOL.'#最新購物車内容:';
+                
+                $total_items = 0;
+                $total_amount = 0;
+                $item_count = 1;
+                foreach ($shopping_cart as $item) {
+                    $answer[] = PHP_EOL.$item_count.'. '.$item['title'].' × '. $item['quantity'].' =  HK$'. ($item['price'] * $item['quantity']);
+                    $total_items += $item['quantity'];
+                    $total_amount += $item['price'] * $item['quantity'];
+                    $item_count++;
+                }
+                
+                $shipping_fee = 50;
+                if($total_amount >= 300) {
+                    $shipping_fee = 0;
+                }
+                
+                $answer[] = PHP_EOL.'共'. $total_items. '件商品，合計金額 HK$'.$total_amount;
+                $answer[] = PHP_EOL.'運費 HK$'.$shipping_fee;
+                $answer[] = PHP_EOL.'纍計總金額 HK$'.($total_amount + $shipping_fee);
+            }
+        }
+        
+
+        return $answer;
+    }
+    
+    function viewCart($intentInfo) {
+        $answer = [];
+        
+        $shopping_cart = MockDatabase::getCart();
+        if(!empty($shopping_cart)) {
+            $answer[] = PHP_EOL.'#最新購物車内容:';
+
+            $total_items = 0;
+            $total_amount = 0;
+            $item_count = 1;
+            foreach ($shopping_cart as $item) {
+                $answer[] = PHP_EOL.$item_count.'. '.$item['title'].' × '. $item['quantity'].' =  HK$'. ($item['price'] * $item['quantity']);
+                $total_items += $item['quantity'];
+                $total_amount += $item['price'] * $item['quantity'];
+                $item_count++;
+            }
+            
+            $shipping_fee = 50;
+            if($total_amount >= 300) {
+                $shipping_fee = 0;
+            }
+
+            $answer[] = PHP_EOL.'共'. $total_items. '件商品，合計金額 HK$'.$total_amount;
+            $answer[] = PHP_EOL.'運費 HK$'.$shipping_fee;
+            $answer[] = PHP_EOL.'纍計總金額 HK$'.($total_amount + $shipping_fee);
         }
         else {
-            $intent_description = [];
-            if(!empty($this->_intentOptions)) {
-                foreach ($this->_intentOptions as $intent_key => $intent) {
-                    $intent_description[] = $intent_key.'|'.$intent['title'].':'.$intent['content'];
+            $answer[] = '#您的購物車尚未添加商品';
+        }
+        
+        return $answer;
+    }
+    
+    function confirmOrder($intentInfo) {
+        $answer = [];
+        
+        $shopping_cart = MockDatabase::getCart();
+        if(empty($shopping_cart)) {
+            $answer[] = PHP_EOL.'您的購物車尚未添加商品';
+        }
+        else {
+            if(!empty($intentInfo['customer_info']['name']) && !empty($intentInfo['customer_info']['phone']) && !empty($intentInfo['customer_info']['address'])) {
+                $newOrder = MockDatabase::createOrderFromCart([
+                    'name' => $intentInfo['customer_info']['name'],
+                    'phone' => $intentInfo['customer_info']['phone'],
+                    'address' => $intentInfo['customer_info']['address']
+                ]);
+                $answer[] = PHP_EOL.'#訂單已創建，以下是您訂單資料:';
+     
+                $answer[] = '訂單編號: '.$newOrder['order_id'];
+                $answer[] = '建立時間: '.$newOrder['created_at'];
+                $answer[] = '客戶姓名: '.$newOrder['customer_name'];
+                $answer[] = '聯絡電話: '.$newOrder['customer_phone'];
+                $answer[] = '收件地址: '.$newOrder['customer_name'];
+
+                $answer[] = '包含商品:';
+                $item_count = 1;
+                foreach ($newOrder['items'] as $item) {
+                    $answer[] = PHP_EOL.$item_count.'. '.$item['title'].' × '. $item['quantity'].' =  HK$'. ($item['price'] * $item['quantity']);
+                    $item_count++;
+                }
+
+                $answer[] = '合計金額: '.$newOrder['items_total'];
+                $answer[] = '運費: '.$newOrder['shipping_fee'];
+                $answer[] = '纍計總金額: '.$newOrder['grand_total'];
+                
+                $answer[] = '最新訂單編號:'.$newOrder['order_id'].'，總金額:HK$'.$newOrder['order_details']['grand_total'];
+            }
+            else {
+                $required_field = [];
+                if(empty($intentInfo['customer_info']['name'])) {
+                    $required_field[] = '姓名';
+                }
+                if(empty($intentInfo['customer_info']['phone'])) {
+                    $required_field[] = '電話';
+                }
+                if(empty($intentInfo['customer_info']['address'])) {
+                    $required_field[] = '地址';
+                }
+                $answer[] = PHP_EOL.'請提供'. implode('、', $required_field).'，以便確認訂單。';
+            }
+        }
+        
+        return $answer;
+    }
+    
+    function viewOrder($intentInfo) {
+        $answer = [];
+        
+        if(empty($intentInfo['order_numbers'])) {
+            $answer[] = PHP_EOL.'#請提供您的訂單編號。';
+        }
+        else {
+            foreach ($intentInfo['order_numbers'] as $order_number) {
+                $newOrder = MockDatabase::queryOrder($order_number);
+                if(!empty($newOrder)) {
+                    $answer[] = PHP_EOL.'#訂單編號<'.$order_number.'>:';
+                    
+                    $answer[] = '建立時間: '.$newOrder['created_at'];
+                    $answer[] = '客戶姓名: '.$newOrder['customer_name'];
+                    $answer[] = '聯絡電話: '.$newOrder['customer_phone'];
+                    $answer[] = '收件地址: '.$newOrder['customer_name'];
+    
+                    $answer[] = '包含商品:';
+                    $item_count = 1;
+                    foreach ($newOrder['items'] as $item) {
+                        $answer[] = PHP_EOL.$item_count.'. '.$item['title'].' × '. $item['quantity'].' =  HK$'. ($item['price'] * $item['quantity']);
+                        $item_count++;
+                    }
+                    
+                    $answer[] = '合計金額: '.$newOrder['items_total'];
+                    $answer[] = '運費: '.$newOrder['shipping_fee'];
+                    $answer[] = '纍計總金額: '.$newOrder['grand_total'];
+                }
+                else {
+                     $answer[] = PHP_EOL.'#找不到此訂單<'.$order_number.'>。';
                 }
             }
-            $intent_description = implode(PHP_EOL, $intent_description);
-            
-            $cases = 
-            [
-                // view_product - 查詢商品
-                ['你們沒有{商品A}？', '1|查詢商品|商品A'],
-                ['{商品A}和{商品B}', '1|查詢商品|{商品A}#{商品B}'],
-                ['{商品A}有貨嗎？', '1|查詢商品|{商品A}'],
-
-                // add_to_cart - 添加購物車
-                ['2件{商品A}', '2|添加商品|{商品A}*2'],
-                ['2件{商品A}和1個{商品B}', '2|添加商品|{商品A}*2#{商品B}*1'],
-                ['加多1個{商品B}', '2|添加商品|{商品B}*1'],
-
-                // revise_cart - 調整購物車
-                ['{商品A}要1個就可以', '3|調整商品|{商品A}*1'],
-                ['{商品A}改為1件', '3|調整商品|{商品A}*1'],
-                ['不需要{商品B}了', '3|調整商品|{商品B}*0'],
-
-                // view_cart - 查看購物車
-                ['我的購物車', '4|查閱購物車'],
-                ['我買了什麼', '4|查閱購物車'],
-
-                // confirm_order - 確認訂單
-                ['結賬', '5|確認訂單'],
-                ['付款', '5|確認訂單'],
-
-                // view_order - 查看訂單
-                ['我的訂單', '6|查閱訂單'],
-                ['訂單 {訂單編號}','6|查閱訂單|{訂單編號}'],
-
-                // others - 其他詢問
-                ['你們的營業時間?', '7|其他'],
-                ['送貨服務', '7|其他']
-            ];
-            $cases_description = [];
-            foreach ($cases as $case) {
-                $cases_description[] = '- '.implode(' → ', $case);
-            }
-            $cases_description = implode(PHP_EOL, $cases_description);
-
-            $system_prompt = <<<PROMPT
-            你是意圖識別專家，根據客戶訊息返回對應的「意圖結果」。
-
-            「意圖選項」
-            {$intent_description}     
-
-            「意圖結果」
-            - 只能為「意圖選項」其中一項
-            - 格式必須為「意圖編號|意圖名稱」，「意圖編號|意圖名稱|商品名稱」或「意圖編號|意圖名稱|訂單編號」。
-            - 當訊息明確提及 {商品名稱} 或 {訂單編號} 時才補充第三欄。
-            - 若訊息包含多個 {商品名稱} 或 {訂單編號}，請用`#`分隔。
-            - 若訊息包含 {商品名稱} 和 {商品數量}，第三欄格式則為 {商品名稱}*{商品數量}。
-            
-            「範例」
-            {$cases_description}
-            PROMPT;
         }
         
-        if($this->_debugMode) {
-            echo '<pre>';
-            print_r($system_prompt);
-            echo '</pre>';
-        }
-
-        return $system_prompt;
+        return $answer;
     }
+    
+    function formatedReply($client_message, $answer) {
+        if(!empty($client_message) && !empty($answer)) {
+            if(is_array($answer)) {
+                $answer = implode(PHP_EOL, $answer);
+            }
+            $answer = trim($answer, PHP_EOL);
+            
+            $systemPrompt = <<<PROMPT
+            角色: 專業客服，協助客戶處理商品查詢、購物車、訂單及一般客服問題。		
+            任務: 根據用戶使用的語言，將提供的<客服回答>潤飾成專業、友善和正向的客服回覆。
+            要求:
+            - 使用<客戶訊息>相同的語言回覆
+            - 語氣親切有禮
+            - 內容清晰有幫助
+            直接輸出修飾後內容，無需解釋。
+            PROMPT;
+            
+            $userPrompt = <<<PROMPT
+            <客戶訊息>
+            {$client_message}
+            
+            <客服回答>
+            {$answer}
+            PROMPT;
 
-    function toolFunctions() {
-        $tools = [];
-
-        $tools[] = [
-            'type' => 'function',
-            'function' => [
-                'name' => 'view_product',
-                'description' => '查詢商品功能、價格、規格、庫存。',
-                'parameters' => [
-                    'type' => 'object',
-                    'properties' => [
-                        'product_name' => [ 'type' => 'string', 'description' => '商品名稱']
-                    ],
-                ]
-            ]
-        ];
-
-        $tools[] = [
-            'type' => 'function',
-            'function' => [
-                'name' => 'add_to_cart',
-                'description' => '將商品加入購物車。',
-                'parameters' => [
-                    'type' => 'object',
-                    'properties' => [
-                        'product_name' => [ 'type' => 'string', 'description' => '商品名稱'],
-                        'quantity' => ['type' => 'integer', 'description' => '數量', 'minimum' => 1]
-                    ],
-                    'required' => ['product_name', 'quantity']
-                ]
-            ]
-        ];
+            $response = $this->doCurl([
+                ['role' => 'system', 'content' => $systemPrompt],
+                ['role' => 'user', 'content' => $userPrompt]
+            ], null, 30);
+            
+            $formatedAnswer = ($response['choices'][0]['message']['content'] ?? '');
+            
+            return $formatedAnswer;
+        }
         
-        $tools[] = [
-            'type' => 'function',
-            'function' => [
-                'name' => 'revise_cart_qty',
-                'description' => '修改或刪除購物車中的商品數量。',
-                'parameters' => [
-                    'type' => 'object',
-                    'properties' => [
-                        'product_name' => ['type' => 'string', 'description' => '商品名稱'],
-                        'quantity' => ['type' => 'integer', 'description' => '數量，0 表示移除', 'minimum' => 0]
-                    ],
-                    'required' => ['product_name', 'quantity']
-                ]
-            ]
-        ];
-        
-        $tools[] = [
-            'type' => 'function',
-            'function' => [
-                'name' => 'view_cart',
-                'description' => '查看購物車商品內容和總額。',
-                'parameters' => [
-                    'type' => 'object', 
-                    'properties' => (object)[]
-                ]
-            ]
-        ];
-
-        $tools[] = [
-            'type' => 'function', 
-            'function' => [
-                'name' => 'confirm_order',
-                'description' => '結帳、生成訂單。需要客戶提供姓名、電話和地址。',
-                'parameters' => [
-                    'type' => 'object',
-                    'properties' => [
-                        'customer_name' => ['type' => 'string'],
-                        'customer_phone' => ['type' => 'string'], 
-                        'customer_address' => ['type' => 'string']
-                    ],
-                    'required' => ['customer_name', 'customer_phone', 'customer_address']
-                ]
-            ]
-        ];
-        
-        $tools[] = [
-            'type' => 'function',
-            'function' => [
-                'name' => 'view_order',
-                'description' => '查詢已下訂單的詳情和進度。',
-                'parameters' => [
-                    'type' => 'object',
-                    'properties' => [
-                        'order_number' => [
-                            'type' => 'string',
-                            'description' => '訂單號碼'
-                        ]
-                    ],
-                    'required' => ['order_number']
-                ]
-            ]
-        ];
-
-        return $tools;
+        return false;
     }
 }
