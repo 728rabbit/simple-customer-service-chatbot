@@ -14,9 +14,7 @@ class aiChatBot {
     private $_sessionID;
     private $_sessionPath = 'sessions/';
     private $_intentInfo = [];
-    private $_extraInfo1 = [];
-    private $_extraInfo2 = [];
-    private $_maxRoundsDialogue = 3;
+    private $_maxRoundsDialogue = 5;
 
     private $_apiKey = 'sk-';
     private $_apiURL = 'https://api.deepseek.com/v1/chat/completions';
@@ -153,8 +151,6 @@ class aiChatBot {
         if(empty($result['feedback'])) {
             $result['feedback'] = nl2br(str_replace(['\r\n', '\n'], PHP_EOL, $this->chat($client_message)));
             $result['intent'] = $this->_intentInfo;
-            $result['extra1'] = $this->_extraInfo1;
-            $result['extra2'] = $this->_extraInfo2;
         }
         else {
             // Save history log
@@ -211,8 +207,6 @@ class aiChatBot {
 
     // Core
     function chat($client_message) {
-        sleep(1);
-        
         // 1. 先判斷客戶意圖
         $this->_intentInfo = $this->detectIntent($client_message);
         if(empty($this->_intentInfo)) {
