@@ -623,8 +623,6 @@ class aiChatBot {
                 $answer[] = '合計金額: '.$newOrder['items_total'];
                 $answer[] = '運費: '.$newOrder['shipping_fee'];
                 $answer[] = '纍計總金額: '.$newOrder['grand_total'];
-                
-                $answer[] = '最新訂單編號:'.$newOrder['order_id'].'，總金額:HK$'.$newOrder['order_details']['grand_total'];
             }
             else {
                 $required_field = [];
