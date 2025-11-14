@@ -605,7 +605,7 @@ class aiChatBot {
                 $answer[] = '建立時間: '.$newOrder['created_at'];
                 $answer[] = '客戶姓名: '.$newOrder['customer_name'];
                 $answer[] = '聯絡電話: '.$newOrder['customer_phone'];
-                $answer[] = '收件地址: '.$newOrder['customer_name'];
+                $answer[] = '收件地址: '.$newOrder['customer_address'];
 
                 $answer[] = '包含商品:';
                 $item_count = 1;
@@ -651,7 +651,7 @@ class aiChatBot {
                     $answer[] = '建立時間: '.$newOrder['created_at'];
                     $answer[] = '客戶姓名: '.$newOrder['customer_name'];
                     $answer[] = '聯絡電話: '.$newOrder['customer_phone'];
-                    $answer[] = '收件地址: '.$newOrder['customer_name'];
+                    $answer[] = '收件地址: '.$newOrder['customer_address'];
     
                     $answer[] = '包含商品:';
                     $item_count = 1;
