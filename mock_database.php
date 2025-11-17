@@ -8,32 +8,38 @@ class MockDatabase {
         'todays_specials' => 
         [
             'title' => '今日有咩特價水果？',
-            'description' => '本週特價水果：\n🍎 日本富士蘋果 原價10元 → 特價8元/個\n🍌 菲律賓香蕉 原價15元 → 特價12元/梳\n🥭 呂宋芒果 原價42元 → 特價35元/磅\n\n滿300元仲可享免費送貨服務！'
+            'description' => '本週特價水果：\n🍎 日本富士蘋果 原價10元 → 特價8元/個\n🍌 菲律賓香蕉 原價15元 → 特價12元/梳\n🥭 呂宋芒果 原價42元 → 特價35元/磅\n\n滿300元仲可享免費送貨服務！',
+            'tags' => '優惠'
         ],
         'business_hours' => 
         [
             'title' => '你哋嘅營業時間係？',
-            'description' => '我哋嘅營業時間係：\n星期一至星期日 09:00-21:00\n全年無休，歡迎隨時光臨！'
+            'description' => '我哋嘅營業時間係：\n星期一至星期日 09:00-21:00\n全年無休，歡迎隨時光臨！',
+            'tags' => '營業時間'
         ],
         'delivery_Service' => 
         [
             'title' => '係咪有送貨服務？',
-            'description' => '我哋提供送貨服務！\n✓ 滿300元免費送貨（港九新界）\n✓ 最快2小時送到指定地址\n✓ 可選擇指定時間配送\n✓ 支援線上付款及貨到付款\n✓ 偏遠地區可能需附加運費'
+            'description' => '我哋提供送貨服務！\n✓ 滿300元免費送貨（港九新界）\n✓ 最快2小時送到指定地址\n✓ 可選擇指定時間配送\n✓ 支援線上付款及貨到付款\n✓ 偏遠地區可能需附加運費',
+            'tags' => '送貨服務'
         ],
         'storage_method' => 
         [
             'title' => '點樣保存水果？',
-            'description' => '水果保存小貼士：\n🍌 香蕉、芒果等熱帶水果不宜雪藏，放在陰涼處即可\n🍎 蘋果、橙等可雪櫃保存，保鮮期更長\n🍓 草莓、提子等應盡快食用，雪櫃可保存2-3天\n🥭 未熟水果可放在室溫下催熟，成熟後再雪藏'
+            'description' => '水果保存小貼士：\n🍌 香蕉、芒果等熱帶水果不宜雪藏，放在陰涼處即可\n🍎 蘋果、橙等可雪櫃保存，保鮮期更長\n🍓 草莓、提子等應盡快食用，雪櫃可保存2-3天\n🥭 未熟水果可放在室溫下催熟，成熟後再雪藏',
+            'tags' => '保存方式'
         ],
         'address' => 
         [
             'title' => '你哋嘅地址係？',
-            'description' => '我哋嘅店舖地址：香港銅鑼灣軒尼詩道123號\n\n附近地標：\n✓ 港鐵銅鑼灣站步行3分鐘\n✓ SOGO百貨對面\n✓ 停車方便，附近有多個停車場'
+            'description' => '我哋嘅店舖地址：香港銅鑼灣軒尼詩道123號\n\n附近地標：\n✓ 港鐵銅鑼灣站步行3分鐘\n✓ SOGO百貨對面\n✓ 停車方便，附近有多個停車場',
+            'tags' => '地址'
         ],
         'payment' => 
         [
             'title' => '如何付款？',
-            'description' => '我哋接受多種付款方式：\n💵 現金支付\n💳 信用卡（Visa/MasterCard/銀聯）\n📱 移動支付（支付寶/微信支付/八達通）\n🏦 轉帳付款（支援FPS/ATM）'
+            'description' => '我哋接受多種付款方式：\n💵 現金支付\n💳 信用卡（Visa/MasterCard/銀聯）\n📱 移動支付（支付寶/微信支付/八達通）\n🏦 轉帳付款（支援FPS/ATM）',
+            'tags' => '付款方式'
         ]
     ];
     
@@ -153,8 +159,60 @@ class MockDatabase {
     public static function queryFAQ($faq_id) {
         return self::$FAQ_DATABASE[$faq_id] ?? '';
     }
+    
+    public static function queryProduct($product_id) {
+        return self::$PRODUCT_DATABASE[$product_id] ?? '';
+    }
+    
+    public static function queryFAQByKeywords($keywords = '') {
+        $search_terms = (is_array($keywords)) ? $keywords: [$keywords];
+        if(!empty($search_terms)) {
+            $match_faq = [];
+            foreach (self::$FAQ_DATABASE as $faq) {
+                $title = strtolower($faq['title']);
+                $tags = isset($faq['tags']) ? strtolower($faq['tags']) : '';
 
-    public static function queryAllProducts($keywords = '') {
+                $match_score = 0;
+                foreach ($search_terms as $term) {
+                    $term = trim($term);
+                    $term = preg_replace('/(\*\d+)$/', '', $term);
+                    
+                    if (!empty($term)) {
+                        // 在title中搜索
+                        if (strpos($title, $term) !== false) {
+                            $match_score += 2; // title匹配權重更高
+                        }
+                        // 在tags中搜索
+                        if (strpos($tags, $term) !== false) {
+                            $match_score += 1;
+                        }
+                    }
+                }
+
+                // 如果有任何搜索詞匹配，就加入結果
+                if ($match_score > 0) {
+                    $faq['match_score'] = $match_score;
+                    $match_faqs[] = $faq;
+                }
+            }
+
+            // 按匹配分數降序排列
+            usort($match_faqs, function($a, $b) {
+                return $b['match_score'] - $a['match_score'];
+            });
+
+            // 移除臨時的match_score字段
+            foreach ($match_faqs as &$faq) {
+                unset($faq['match_score']);
+            }
+
+            return reset($match_faqs);
+        }
+        
+        return false;
+    }
+
+    public static function queryProductByKeywords($keywords = '') {
         if(!empty($keywords)) {
             $match_products = [];
             $search_terms = explode('#', strtolower(trim($keywords)));
@@ -204,19 +262,7 @@ class MockDatabase {
         }
     }
     
-    public static function queryProducts($product_id) {
-        return self::$PRODUCT_DATABASE[$product_id] ?? '';
-    }
     
-    public static function queryFAQEmbeding($txt) {
-        
-        
-    }
-    
-    public static function queryProductsEmbeding($txt) {
-        
-        
-    }
 
     public static function getCart() {
         $session_id = session_id();
