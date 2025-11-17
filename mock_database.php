@@ -9,7 +9,7 @@ class MockDatabase {
         [
             'title' => '今日有咩特價水果？',
             'description' => '本週特價水果：\n🍎 日本富士蘋果 原價10元 → 特價8元/個\n🍌 菲律賓香蕉 原價15元 → 特價12元/梳\n🥭 呂宋芒果 原價42元 → 特價35元/磅\n\n滿300元仲可享免費送貨服務！',
-            'tags' => '優惠'
+            'tags' => '今期優惠'
         ],
         'business_hours' => 
         [
@@ -33,7 +33,7 @@ class MockDatabase {
         [
             'title' => '你哋嘅地址係？',
             'description' => '我哋嘅店舖地址：香港銅鑼灣軒尼詩道123號\n\n附近地標：\n✓ 港鐵銅鑼灣站步行3分鐘\n✓ SOGO百貨對面\n✓ 停車方便，附近有多個停車場',
-            'tags' => '地址'
+            'tags' => '店鋪地址'
         ],
         'payment' => 
         [
@@ -167,7 +167,7 @@ class MockDatabase {
     public static function queryFAQByKeywords($keywords = '') {
         $search_terms = (is_array($keywords)) ? $keywords: [$keywords];
         if(!empty($search_terms)) {
-            $match_faq = [];
+            $match_faqs = [];
             foreach (self::$FAQ_DATABASE as $faq) {
                 $title = strtolower($faq['title']);
                 $tags = isset($faq['tags']) ? strtolower($faq['tags']) : '';
