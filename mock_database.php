@@ -262,7 +262,13 @@ class MockDatabase {
         }
     }
     
+    public static function queryFAQEmbeding($message = '') {
+        return false;
+    }
     
+    public static function queryProductEmbeding($message = '') {
+        return false;
+    }
 
     public static function getCart() {
         $session_id = session_id();
