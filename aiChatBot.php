@@ -16,13 +16,9 @@ class aiChatBot {
     private $_intentInfo = [];
     private $_maxRoundsDialogue = 5;
 
-    private $_apiKey = 'sk-666479b88e5b430b9db9e32bfbddb853';
+    private $_apiKey = 'sk-';
     private $_apiURL = 'https://api.deepseek.com/v1/chat/completions';
     private $_apiModel = 'deepseek-chat';
-    
-    /*private $_apiKey = 'sk-ZblDzitHNzx3FORJ3G1da78EOlhSTavAkPRqBdJ8LVrz49AC';
-    private $_apiURL = 'https://yinli.one/v1/chat/completions';
-    private $_apiModel = 'gpt-3.5-turbo';*/
 
     public function __construct($sessionID, $debugMode = false) {
         $this->_sessionID = $sessionID;
