@@ -91,7 +91,7 @@ class aiChatBot {
                 $result['feedback'] = $localFAQ['title'];
             }
             else {
-                $localProduct = MockDatabase::queryProducts($lrag_match_output[2]);
+                $localProduct = MockDatabase::queryProduct($lrag_match_output[2]);
                 if(!empty($localProduct)) {
                     $result['feedback'] = '請問 "'.$localProduct['title'].'" 嘅資訊？';
                 }
@@ -118,7 +118,7 @@ class aiChatBot {
                 $result['feedback'] = nl2br(str_replace(['\r\n', '\n'], PHP_EOL, $localFAQ['description']));
             }
             else {
-                $localProduct = MockDatabase::queryProducts($lrag_match_output[2]);
+                $localProduct = MockDatabase::queryProduct($lrag_match_output[2]);
                 if(!empty($localProduct)) {
                     $result['feedback'] = nl2br(str_replace(['\r\n', '\n'], PHP_EOL, implode(PHP_EOL, [
                         $localProduct['title'].' ('.$localProduct['origin'].')',
@@ -136,7 +136,7 @@ class aiChatBot {
                 $result['feedback'] = nl2br(str_replace(['\r\n', '\n'], PHP_EOL, $localFAQ['description']));
             }
             else {
-                $localProduct = MockDatabase::queryProductsEmbeding($client_message);
+                $localProduct = MockDatabase::queryProductEmbeding($client_message);
                 if(!empty($localProduct)) {
                     $result['feedback'] = nl2br(str_replace(['\r\n', '\n'], PHP_EOL, implode(PHP_EOL, [
                         $localProduct['title'].' ('.$localProduct['origin'].')',
@@ -244,6 +244,18 @@ class aiChatBot {
             case 6:
                 $answer = $this->viewOrder($this->_intentInfo);
                 break;
+            case 7:
+                if(!empty($this->_intentInfo['keywords'])) {
+                    $localFAQ = MockDatabase::queryFAQByKeywords($this->_intentInfo['keywords']);
+                    print_r($localFAQ);
+                    if(!empty($localFAQ)) {
+                        $answer = $localFAQ['description'];
+                    }
+                    if(!empty($answer)) {
+                        break;
+                    }
+                }
+                break;
             case 8:
                 $answer = '包含多項任務，為了確保處理正確，麻煩逐一操作。';
                 break;
@@ -290,7 +302,7 @@ class aiChatBot {
             <輸出規則>: 
             1. 模型必須輸出 JSON，不可以有額外文字。
             2. JSON 結構如下: 
-               - intent_id (number): 意圖編號 1~7
+               - intent_id (number): 意圖編號
                - intent_name (string): 意圖名稱
                - items (array，可選): 商品列表，每項可包含 name (商品名稱) 與 qty (數量)
                - order_numbers (array，可選): 訂單編號列表
@@ -298,6 +310,7 @@ class aiChatBot {
                     - name (string，可選)
                     - phone (string，可選)
                     - address (string，可選)
+               - keywords (array，可選)，僅 intent_id=7): 關鍵字
             3. 只能輸出一個意圖。
             4. 若訊息有商品名稱，必填 items。
             5. 若商品有數量，需以 qty 標示。
@@ -307,7 +320,14 @@ class aiChatBot {
             9. 對於確認訂單意圖: 
                - 如果使用者尚未提供聯絡資訊，可先輸出空的 customer_info 或缺少欄位的 JSON。
                - 後續使用者補充聯絡資訊時，模型應保持 thread context，將欄位補齊到同一個 intent JSON。
-            10. JSON 必須合法，不能有多餘文字。
+            10. 對於其他問題意圖 (intent_id=7)，需提供 keywords 陣列，包含從使用者訊息中抽取的重要關鍵字。
+            11. 關鍵字抽取規則：
+                - 提取名詞、專業術語、核心概念
+                - 排除常見停用詞（的、了、是、在等）
+                - 保留重要動詞和形容詞
+                - 長度限制：每個關鍵字2-10個字符
+            12. JSON 必須合法，不能有多餘文字。
+                    
 
             <範例>: 
             - 您們沒有商品A？ → {"intent_id":1,"intent_name":"商品查詢","items":[{"name":"商品A"}]}
@@ -330,12 +350,12 @@ class aiChatBot {
             - 我的訂單 → {"intent_id":6,"intent_name":"訂單查詢","order_numbers":[]}
             - 訂單 ABC123 → {"intent_id":6,"intent_name":"訂單查詢","order_numbers":["ABC123"]}
                     
-            - 您們的營業時間? → {"intent_id":7,"intent_name":"其他問題"}
+            - 您們的營業時間? → {"intent_id":7,"intent_name":"其他問題","keywords":["營業時間"]}
                     
-            - 2梳香蕉，然後刪除蘋果 → {"intent_id":8,"intent_name":"多個任務"}
+            - 2件商品A，然後商品B → {"intent_id":8,"intent_name":"多項任務"}
             PROMPT;
             
-            $allProducts = MockDatabase::queryAllProducts($client_message);
+            $allProducts = MockDatabase::queryProductByKeywords($client_message);
             if (!empty($allProducts)) {
                 $client_message = '請問 "'.$client_message.'" 嘅資訊？';
             }
@@ -366,7 +386,7 @@ class aiChatBot {
         
         if(!empty($intentInfo['items'])) {
             foreach ($intentInfo['items'] as $item) {
-                $allProducts = MockDatabase::queryAllProducts($item['name']);
+                $allProducts = MockDatabase::queryProductByKeywords($item['name']);
                 if(!empty($allProducts)) {
                     $related_products = [];
                     foreach ($allProducts as $localProduct) {
@@ -405,7 +425,7 @@ class aiChatBot {
         
         if(!empty($intentInfo['items'])) {
             foreach ($intentInfo['items'] as $item) {
-                $allProducts = MockDatabase::queryAllProducts($item['name']);
+                $allProducts = MockDatabase::queryProductByKeywords($item['name']);
                 if(!empty($allProducts)) {
                     $related_products = [];
                     foreach ($allProducts as $localProduct) {
@@ -480,7 +500,7 @@ class aiChatBot {
         if(!empty($intentInfo['items'])) {
             
             foreach ($intentInfo['items'] as $item) {
-                $allProducts = MockDatabase::queryAllProducts($item['name']);
+                $allProducts = MockDatabase::queryProductByKeywords($item['name']);
                 if(!empty($allProducts)) {
                     $related_products = [];
                     foreach ($allProducts as $localProduct) {
