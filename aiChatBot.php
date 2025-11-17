@@ -16,9 +16,13 @@ class aiChatBot {
     private $_intentInfo = [];
     private $_maxRoundsDialogue = 5;
 
-    private $_apiKey = 'sk-';
+    private $_apiKey = 'sk-666479b88e5b430b9db9e32bfbddb853';
     private $_apiURL = 'https://api.deepseek.com/v1/chat/completions';
     private $_apiModel = 'deepseek-chat';
+    
+    /*private $_apiKey = 'sk-ZblDzitHNzx3FORJ3G1da78EOlhSTavAkPRqBdJ8LVrz49AC';
+    private $_apiURL = 'https://yinli.one/v1/chat/completions';
+    private $_apiModel = 'gpt-3.5-turbo';*/
 
     public function __construct($sessionID, $debugMode = false) {
         $this->_sessionID = $sessionID;
@@ -244,6 +248,9 @@ class aiChatBot {
             case 6:
                 $answer = $this->viewOrder($this->_intentInfo);
                 break;
+            case 8:
+                $answer = '包含多項任務，為了確保處理正確，麻煩逐一操作。';
+                break;
         }
         
         // 3. 優化輸出的答案
@@ -280,8 +287,9 @@ class aiChatBot {
             3. 修改購物車: 刪減或修改商品數量
             4. 查看購物車: 商品清單、總金額
             5. 確認訂單: 結帳/付款(customer_info array，含 name/phone/address，可分步補齊)
-            6. 訂單查詢: 訂單詳情、進度
+            6. 訂單查詢: 訂單詳情、進度        
             7. 其他問題: 營業時間、售後服務
+            8. 多項任務: 包含多項操作/意圖
 
             <輸出規則>: 
             1. 模型必須輸出 JSON，不可以有額外文字。
@@ -327,6 +335,8 @@ class aiChatBot {
             - 訂單 ABC123 → {"intent_id":6,"intent_name":"訂單查詢","order_numbers":["ABC123"]}
                     
             - 您們的營業時間? → {"intent_id":7,"intent_name":"其他問題"}
+                    
+            - 2梳香蕉，然後刪除蘋果 → {"intent_id":8,"intent_name":"多個任務"}
             PROMPT;
             
             $allProducts = MockDatabase::queryAllProducts($client_message);
